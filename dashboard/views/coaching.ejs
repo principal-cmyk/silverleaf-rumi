@@ -191,6 +191,14 @@
                 <!-- Actions for Completed Sessions -->
                 <% if (session.status === 'completed') { %>
                   <div class="mt-4 space-y-3">
+                    <%- include('partials/observation-record', {
+                      record: session.observation_record,
+                      percentage: session.overall_percentage,
+                      rated: session.rated_indicators,
+                      total: session.total_indicators,
+                      video: session.video_stats,
+                    }) %>
+
                     <!-- Classroom Recording Audio -->
                     <% if (session.audio_url) { %>
                       <div>

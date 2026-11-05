@@ -1,0 +1,53 @@
+<% if (record && record.action_step) { %>
+  <details class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+    <summary class="cursor-pointer text-sm font-medium text-gray-800">
+      📋 Observation record<% if (record.overall_level) { %>: <%= record.overall_level %><% } %><% if (percentage) { %> (<%= percentage %>%)<% } %><% if (rated && total) { %> · <%= rated %> of <%= total %> indicators observed<% } %>
+    </summary>
+    <div class="mt-3 space-y-3 text-sm text-gray-700">
+      <div>
+        <p class="font-medium text-gray-900">🎯 Action step</p>
+        <p><%= record.action_step %></p>
+        <% if (record.how && record.how.length) { %>
+          <ol class="list-decimal ml-5 mt-1">
+            <% record.how.forEach((step) => { %><li><%= step %></li><% }) %>
+          </ol>
+        <% } %>
+        <p class="text-xs text-gray-500 mt-1">
+          <%= [record.category, record.type, record.gbf_phase, record.gbf_skill].filter(Boolean).join(' · ') %>
+        </p>
+      </div>
+      <% if (record.glows && record.glows.length) { %>
+        <div>
+          <p class="font-medium text-gray-900">✨ Glows</p>
+          <ul class="list-disc ml-5"><% record.glows.forEach((glow) => { %><li><%= glow %></li><% }) %></ul>
+        </div>
+      <% } %>
+      <% if (record.grows && record.grows.length) { %>
+        <div>
+          <p class="font-medium text-gray-900">🌱 Grows</p>
+          <ul class="list-disc ml-5"><% record.grows.forEach((grow) => { %><li><%= grow %></li><% }) %></ul>
+        </div>
+      <% } %>
+      <% if (record.notes_for_teacher) { %>
+        <div>
+          <p class="font-medium text-gray-900">💬 Note for the teacher</p>
+          <p><%= record.notes_for_teacher %></p>
+        </div>
+      <% } %>
+      <% if (video && video.readable) { %>
+        <div>
+          <p class="font-medium text-gray-900">🎥 Seen in the video (<%= video.readable %> moments)</p>
+          <ul class="list-disc ml-5">
+            <li>Hands raised in <%= video.handsSeen %> of <%= video.handsJudged %> moments</li>
+            <li>Students off task in <%= video.offTaskSeen %> of <%= video.offTaskJudged %> moments</li>
+            <% if (video.teacherSeen) { %>
+              <li>Teacher visible in <%= video.teacherSeen %> moments, moved between areas <%= video.moves %> times, close work with students in <%= video.closeWork %></li>
+            <% } else { %>
+              <li>Teacher not visible, so circulation cannot be judged</li>
+            <% } %>
+          </ul>
+        </div>
+      <% } %>
+    </div>
+  </details>
+<% } %>

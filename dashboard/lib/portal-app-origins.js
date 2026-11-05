@@ -59,9 +59,21 @@ function buildPortalCorsOrigins({ portalUrl, websiteOrigins = [], appEnabled = f
 }
 
 /** express-session `cookie` for the dashboard's one global session. Always 'lax'. */
+/**
+ * A dashboard on one machine, with no HTTPS in front of it. Binding to loopback is what makes the plain cookie safe,
+ * so one exact setting controls both: a plain cookie on a public address must not be possible.
+ */
+function isLocalOnly() {
+  return process.env.DASHBOARD_LOCAL_ONLY === 'true';
+}
+
+function listenHost() {
+  return isLocalOnly() ? '127.0.0.1' : '0.0.0.0';
+}
+
 function sessionCookieOptions() {
   return {
-    secure: true, // HTTPS only
+    secure: !isLocalOnly(), // HTTPS only, except on loopback
     httpOnly: true, // Prevents client-side JS from accessing cookie
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     sameSite: 'lax',
@@ -98,5 +110,6 @@ module.exports = {
   isPortalAppEnabled,
   keepSessionsLaxOutsidePortalApi,
   sessionCookieOptions,
+  listenHost,
   widenPortalAppSession,
 };

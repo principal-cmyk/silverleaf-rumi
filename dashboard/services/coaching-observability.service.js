@@ -51,6 +51,11 @@ async function getCoachingSessions(dbClient, page = 1, limit = 10, statusFilter 
     SELECT
       cs.id,
       cs.user_id,
+      cs.analysis_data->'observation_record' AS observation_record,
+      cs.analysis_data->'scores'->>'overall_percentage' AS overall_percentage,
+      cs.analysis_data->'scores'->>'rated_indicators' AS rated_indicators,
+      cs.analysis_data->'scores'->>'total_indicators' AS total_indicators,
+      cs.conversation_state->'video_observation_stats' AS video_stats,
       cs.session_id,
       cs.status,
       cs.last_successful_step,
@@ -109,6 +114,11 @@ async function getCoachingSessions(dbClient, page = 1, limit = 10, statusFilter 
       voice_debrief_duration_seconds: row.voice_debrief_duration_seconds,
       created_at: row.created_at,
       completed_at: row.completed_at,
+      observation_record: row.observation_record,
+      overall_percentage: row.overall_percentage,
+      rated_indicators: row.rated_indicators,
+      total_indicators: row.total_indicators,
+      video_stats: row.video_stats,
       users: {
         id: row.user_id,
         first_name: row.first_name,

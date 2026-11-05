@@ -140,6 +140,7 @@ const {
   isPortalAppEnabled,
   keepSessionsLaxOutsidePortalApi,
   sessionCookieOptions,
+  listenHost,
 } = require('./lib/portal-app-origins');
 
 // BYOF Routes (Build Your Own Feature) - Conversational AI for bug/feature planning
@@ -3398,7 +3399,7 @@ app.use((err, req, res, next) => {
 // START SERVER
 // ============================================================================
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, listenHost(), () => {
   const version = rumiVersion();
 
   console.log(`\n${'='.repeat(70)}`);
