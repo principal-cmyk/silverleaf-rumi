@@ -207,6 +207,19 @@ class ReportGeneratorService {
         }
       }
 
+      // A framework can give the teacher its own feedback fields (the school's Action Step, Glows, Grows and Notes).
+      if (!isRetry) {
+        try {
+          const { listFrameworks, getFramework } = require('./frameworks/framework-registry');
+          const module = listFrameworks().includes(enhancedAnalysis.framework) ? getFramework(enhancedAnalysis.framework) : null;
+          for (const message of (module?.reportChatMessages ? module.reportChatMessages(enhancedAnalysis) : [])) {
+            await WhatsAppService.sendMessage(from, message);
+          }
+        } catch (recordError) {
+          logToFile('⚠️ Framework feedback messages failed (non-critical)', { coachingSessionId, error: recordError.message });
+        }
+      }
+
       // Generate and send voice debrief (optional, won't fail entire process)
       if (!isRetry) {
         await this.generateAndSendVoiceDebrief(session, from, coachingSessionId, enhancedAnalysis);

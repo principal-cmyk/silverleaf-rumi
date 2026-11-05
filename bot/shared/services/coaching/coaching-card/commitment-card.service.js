@@ -40,10 +40,10 @@ const CODESWITCH_RULE = {
 };
 
 /** A Q3 answer only counts as a commitment if she actually said something. */
-function extractQ3(conversationState) {
+function extractQ3(conversationState, commitmentQuestion = 3) {
   const qs = (conversationState && conversationState.questions) || [];
   if (!qs.length) return null;
-  const q3 = qs.find((q) => String(q.question_number) === '3') || qs[qs.length - 1];
+  const q3 = qs.find((q) => String(q.question_number) === String(commitmentQuestion)) || qs[qs.length - 1];
   if (!q3 || typeof q3.answer !== 'string' || q3.answer.trim().length < 3) return null;
   return q3;
 }
@@ -104,11 +104,18 @@ async function fallbackCard(analysis, teacherName, priorAction, lang) {
  * @returns {Promise<object|null>}
  */
 async function generateCommitmentCard(analysis, conversationState, outputLanguage = 'en', opts = {}) {
+  const card = await buildCard(analysis, conversationState, outputLanguage, opts);
+  // A framework whose record names one action step keeps it: a second step on the card would contradict the report.
+  const fixedStep = analysis && analysis.observation_record && analysis.observation_record.action_step;
+  return card && fixedStep ? { ...card, action: fixedStep, highlights: [] } : card;
+}
+
+async function buildCard(analysis, conversationState, outputLanguage, opts) {
   const { teacherName = 'Teacher', priorAction = null } = opts;
   const lang = (outputLanguage || 'en').slice(0, 2);
   if (!analysis) return null;
 
-  const q3 = extractQ3(conversationState);
+  const q3 = extractQ3(conversationState, analysis.observation_record?.commitment_question);
   if (!q3) {
     logToFile('Commitment card: no Q3 commitment → rule-based fallback', { framework: analysis.framework });
     return fallbackCard(analysis, teacherName, priorAction, lang);

@@ -24,6 +24,30 @@ const { NUM_REFLECTIVE_QUESTIONS } = require('../../config/coaching-debrief.conf
 const { getCoachingMessage } = require('../../config/coaching-messages');
 const path = require('path');
 
+/** The framework's own conversation, if it has one. Every other framework keeps the standard three questions. */
+function reflectionFor(analysisData) {
+  const { listFrameworks, getFramework } = require('./frameworks/framework-registry');
+  const key = analysisData && analysisData.framework;
+  return (key && listFrameworks().includes(key) && getFramework(key).reflection) || null;
+}
+
+/** The action step agreed last time, so a conversation can open from it. Never fails the question. */
+async function priorActionStep(userId, coachingSessionId) {
+  try {
+    const { ownCoaching } = require('./own-coaching');
+    const { data } = await ownCoaching(supabase.from('coaching_sessions').select('analysis_data'))
+      .eq('user_id', userId)
+      .neq('id', coachingSessionId)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    return data?.[0]?.analysis_data?.observation_record?.action_step || null;
+  } catch (error) {
+    logToFile('⚠️ Could not read the prior action step', { error: error.message });
+    return null;
+  }
+}
+
 class ReflectiveConversationService {
   /**
    * Conduct reflective conversation (generate and send question)
@@ -69,6 +93,16 @@ class ReflectiveConversationService {
       const corpus = session.analysis_data && session.analysis_data.reflective_corpus;
       const teacherFirstName = (session.analysis_data && session.analysis_data.teacherFirstName) || '';
 
+      const reflection = reflectionFor(session.analysis_data);
+      const record = session.analysis_data && session.analysis_data.observation_record;
+      const beatOptions = reflection ? {
+        beat: reflection.beat(questionNumber, {
+          priorActionStep: questionNumber === 1 ? await priorActionStep(session.user_id, coachingSessionId) : null,
+        }),
+        fallback: reflection.fallback(questionNumber),
+        record: { action_step: record?.action_step, glows: record?.glows, grows: record?.grows },
+      } : {};
+
       let question;
       if (corpus) {
         // Build chain history from the prior Q/A turns. v12 expects an
@@ -86,7 +120,10 @@ class ReflectiveConversationService {
           questionNumber,
           questionLanguage,
           teacherFirstName,
+          beatOptions,
         );
+      } else if (reflection) {
+        question = beatOptions.fallback;
       } else {
         const { buildSafeFallback } = require('./reflective-questions/guardrails');
         const { resolveProfile } = require('./reflective-questions/language-profiles');
@@ -144,6 +181,10 @@ class ReflectiveConversationService {
         languageCode,
         questionLength: question.length
       });
+
+      // "Punch it": the step, in the coach's exact words, comes before the question that plans it.
+      const announcement = reflection ? reflection.beforeQuestion(questionNumber, record) : null;
+      if (announcement) await WhatsAppService.sendMessage(from, announcement);
 
       // Send the question as a voice note. Voice is optional, so without it the question is typed: scoring has already
       // succeeded by now, and a missing speech key must not cost the teacher the rest of their session.
@@ -223,13 +264,15 @@ class ReflectiveConversationService {
       // Get session data including user_id for language updates
       const { data: session, error: sessionError } = await supabase
         .from('coaching_sessions')
-        .select('conversation_state, user_id')
+        .select('conversation_state, user_id, analysis_data')
         .eq('id', coachingSessionId)
         .single();
 
       if (sessionError || !session) {
         throw new Error('Coaching session not found');
       }
+
+      const reflection = reflectionFor(session.analysis_data);
 
       // Extract current question number from state
       const currentState = session.conversation_state.current_state;
@@ -307,11 +350,17 @@ class ReflectiveConversationService {
       });
 
       // Check if we need more questions
-      if (questionsAnswered < NUM_REFLECTIVE_QUESTIONS) {
+      const moreQuestions = reflection
+        ? questionsAnswered < reflection.numQuestions
+        : questionsAnswered < NUM_REFLECTIVE_QUESTIONS;
+      if (moreQuestions) {
         // Generate next question
         await this.conductReflectiveConversation(coachingSessionId, from, questionsAnswered + 1);
       } else {
         // All questions answered - proceed to report generation
+        const followUp = reflection ? reflection.closing(session.analysis_data?.observation_record) : null;
+        if (followUp) await WhatsAppService.sendMessage(from, followUp);
+
         // Get user's language for thank you message
         const { data: sessionData } = await supabase
           .from('coaching_sessions')

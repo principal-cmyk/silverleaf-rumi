@@ -66,14 +66,15 @@ describe('Framework Registry (bd-596)', () => {
 
   describe('listFrameworks()', () => {
 
-    test('SCENARIO: Lists all 5 registered framework keys', () => {
+    test('SCENARIO: Lists all 6 registered framework keys', () => {
       const keys = listFrameworks();
       expect(keys).toContain('oecd');
       expect(keys).toContain('hots');
       expect(keys).toContain('teach');
       expect(keys).toContain('fico');
       expect(keys).toContain('mewaka');
-      expect(keys).toHaveLength(5);
+      expect(keys).toContain('silverleaf');
+      expect(keys).toHaveLength(6);
     });
   });
 });

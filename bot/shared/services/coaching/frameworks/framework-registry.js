@@ -17,6 +17,7 @@ const registry = {
   teach:  () => require('./teach-framework'),
   fico:   () => require('./fico-framework'),
   mewaka: () => require('./mewaka-framework'),
+  silverleaf: () => require('./silverleaf-framework'),
 };
 
 // ─── Cache ───────────────────────────────────────────────────────────

@@ -30,6 +30,10 @@ might want to change, it tells you **where** the seam is, **what kind** of chang
   The selected framework is honoured by `analyzePedagogy` in
   [`bot/shared/services/gpt5-mini.service.js`](../bot/shared/services/gpt5-mini.service.js) — it drives the
   prompt + scoring (OECD keeps the canonical inline path; other frameworks route through their module).
+- **Worked example of a school's own rubric:** [`silverleaf-framework.js`](../bot/shared/services/coaching/frameworks/silverleaf-framework.js)
+  scores only what a recording can show, treats an indicator without evidence as not observed, and sends the school's own
+  feedback fields to the teacher through the optional `reportChatMessages`, `revisionPrompt` and
+  `keepsAnalysisThroughReflection` hooks.
 - **To add a framework:** add a module under
   [`bot/shared/services/coaching/frameworks/`](../bot/shared/services/coaching/frameworks/) exporting
   `getSystemPrompt / buildAnalysisPrompt / computeScores / getScoringConstants`, then register it in

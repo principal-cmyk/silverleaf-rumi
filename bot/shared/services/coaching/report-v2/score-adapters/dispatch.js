@@ -17,6 +17,7 @@ const ADAPTERS = {
   teach:  () => require('./teach-adapter').buildTeachGroups,
   fico:   () => require('./fico-adapter').buildFicoGroups,
   mewaka: () => require('./mewaka-adapter').buildMewakaGroups,
+  silverleaf: () => require('./silverleaf-adapter').buildSilverleafGroups,
 };
 
 /**

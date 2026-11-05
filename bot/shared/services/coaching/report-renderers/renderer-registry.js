@@ -94,6 +94,7 @@ const renderers = {
   teach:  heroRenderer,
   fico:   heroRenderer,
   mewaka: heroRenderer,
+  silverleaf: heroRenderer,
 };
 
 const DEFAULT_RENDERER = pdfkitRenderer;

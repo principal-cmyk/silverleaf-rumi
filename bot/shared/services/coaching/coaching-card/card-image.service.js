@@ -19,6 +19,7 @@ const FRAMEWORK_COLORS = {
   hots: '#059669',   // Green
   teach: '#D97706',  // Amber
   fico: '#7C3AED',   // Purple
+  silverleaf: '#1E7A4C', // Green
 };
 
 const FRAMEWORK_LABELS = {
@@ -26,6 +27,7 @@ const FRAMEWORK_LABELS = {
   hots: 'HOTS Framework',
   teach: 'Teach Framework',
   fico: 'FICO Framework',
+  silverleaf: 'Silverleaf Framework',
 };
 
 /**

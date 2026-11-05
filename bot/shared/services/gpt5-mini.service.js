@@ -404,6 +404,22 @@ CONVERSATIONAL FRAMEWORK: S.T.I.C.K.S. PRINCIPLES
       const analysisWithMarks = useFrameworkModule
         ? framework.computeScores(result, hasLessonPlanData)
         : this._computeMarksFromScores(result, hasLessonPlanData);
+      // A framework can send part of its answer back once to meet a hard rule. Failing that only costs the polish.
+      if (useFrameworkModule && typeof framework.revisionPrompt === 'function') {
+        const revision = framework.revisionPrompt(analysisWithMarks);
+        if (revision) {
+          try {
+            const revised = await this.openai.chat.completions.create({
+              model: 'gpt-5-mini-2025-08-07',
+              messages: [{ role: 'user', content: revision }],
+              max_completion_tokens: 2000,
+            });
+            framework.applyRevision(analysisWithMarks, revised.choices[0].message.content);
+          } catch (revisionError) {
+            logToFile('⚠️ Framework revision failed (non-critical)', { error: revisionError.message });
+          }
+        }
+      }
       // Stamp the active framework so the report side dispatches the right transformer/renderer
       // instead of silently defaulting to OECD.
       analysisWithMarks.framework = (framework && framework.name) || 'oecd';
@@ -413,6 +429,7 @@ CONVERSATIONAL FRAMEWORK: S.T.I.C.K.S. PRINCIPLES
         analysisWithMarks.scores.max_marks = hasLessonPlanData
           ? CLASSROOM_MARKS_WITH_LP
           : CLASSROOM_MARKS_BASE;
+        if (useFrameworkModule && framework.maxMarks === null) analysisWithMarks.scores.max_marks = analysisWithMarks.scores.overall_max_marks;
       }
       if (hasLessonPlanData && lessonPlanStructured) {
         analysisWithMarks.subject = lessonPlanStructured.subject || analysisWithMarks.subject;
@@ -709,16 +726,17 @@ CONVERSATIONAL FRAMEWORK: S.T.I.C.K.S. PRINCIPLES
    * @param {string} [firstName='']  bare first name (no honorific)
    * @returns {Promise<string>} the question in the teacher's language
    */
-  static async _generateReflectiveQuestionV12(corpus, conversationHistory = [], questionNumber = 1, languageCode = 'en', firstName = '') {
+  static async _generateReflectiveQuestionV12(corpus, conversationHistory = [], questionNumber = 1, languageCode = 'en', firstName = '', options = {}) {
     const { resolveProfile } = require('./coaching/reflective-questions/language-profiles');
     const { buildQuestionPrompt } = require('./coaching/reflective-questions/question-prompt');
     const { callReflective } = require('./coaching/reflective-questions/llm-router.service');
     const { validateQuestion, buildSafeFallback } = require('./coaching/reflective-questions/guardrails');
     const profile = resolveProfile(languageCode);
-    const baseSys = buildQuestionPrompt(questionNumber, corpus, profile, firstName);
-    const user = questionNumber === 1
+    const baseSys = buildQuestionPrompt(questionNumber, corpus, profile, firstName, { beat: options.beat });
+    const recordBlock = options.record ? `\n\nOBSERVATION RECORD:\n${JSON.stringify(options.record)}` : '';
+    const user = (questionNumber === 1
       ? `CORPUS:\n${JSON.stringify(corpus)}`
-      : `CORPUS:\n${JSON.stringify(corpus)}\n\nCONVERSATION SO FAR:\n${JSON.stringify(conversationHistory)}`;
+      : `CORPUS:\n${JSON.stringify(corpus)}\n\nCONVERSATION SO FAR:\n${JSON.stringify(conversationHistory)}`) + recordBlock;
     const generate = async (sys) => {
       const { content, model_used } = await callReflective(
         [{ role: 'system', content: sys }, { role: 'user', content: user }],
@@ -739,7 +757,7 @@ CONVERSATIONAL FRAMEWORK: S.T.I.C.K.S. PRINCIPLES
       if (!retryViolations.length) {
         ({ question, model_used } = retry);
       } else {
-        question = buildSafeFallback(questionNumber, corpus, profile);
+        question = options.fallback || buildSafeFallback(questionNumber, corpus, profile);
         model_used = 'safe-fallback';
       }
     }
@@ -1105,6 +1123,13 @@ Rules:
 
       if (!qaSummary) {
         logToFile('⚠️  No Q&A to incorporate, returning original analysis');
+        return analysisData;
+      }
+
+      // A framework can own its finished record, in which case this OECD-shaped rewrite would only lose it.
+      const { listFrameworks, getFramework } = require('./coaching/frameworks/framework-registry');
+      if (listFrameworks().includes(analysisData?.framework) && getFramework(analysisData.framework).keepsAnalysisThroughReflection) {
+        logToFile('Analysis kept as written through reflection', { framework: analysisData.framework });
         return analysisData;
       }
 

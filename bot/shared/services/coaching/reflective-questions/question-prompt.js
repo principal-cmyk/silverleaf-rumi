@@ -34,14 +34,15 @@ The class chorusing 'yes'/'ndiyo'/'yes sir' is the MOST COMMON signal in every P
  * @param {object} corpus  { lesson_throughline_en, significant_moments[], collective_moments[], ... }
  * @param {{language:string, script:string, region:string, avoid_hint?:string, gender_hint?:string}} profile
  * @param {string} firstName  bare first name, NO honorific
+ * @param {{beat?: string}} [options]  a framework's own beat for this turn, in place of the three above
  * @returns {string} system prompt
  */
-function buildQuestionPrompt(questionNumber, corpus, profile, firstName = '') {
+function buildQuestionPrompt(questionNumber, corpus, profile, firstName = '', options = {}) {
   const { language, script, region, avoid_hint = '', gender_hint = '' } = profile;
   // "English (Latin)" means the alphabet to us. A model read it as the Latin language and wrote exactly that.
   const written = language === 'English' ? 'English' : `${language} (${script})`;
   const englishTerms = language === 'English' ? '' : ' (Latin)';
-  const beat = (Q_BEATS[questionNumber] || Q_BEATS[1]).replace(/\{firstName\}/g, firstName || 'the teacher');
+  const beat = (options.beat || Q_BEATS[questionNumber] || Q_BEATS[1]).replace(/\{firstName\}/g, firstName || 'the teacher');
 
   // This question is read aloud by a text-to-speech voice. For a non-Latin-script
   // language (e.g. Urdu Nastaliq) two things break the voice and MUST be enforced in-prompt:

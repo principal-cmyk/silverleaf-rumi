@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Classroom coaching accepts 10 to 15 minute videos.** Rumi coaches on the speech and on stills read about every 30 seconds against a behaviour checklist (order, hands raised, off-task students, teacher position and proximity), counted across the lesson, for every framework. See [Classroom videos](docs/features/coaching.md#classroom-videos).
 
+**A school's own rubric can be the coaching framework.** `silverleaf` scores a competency rubric on levels I-V, marks anything without evidence as not observed, and produces one Get Better Faster action step with Glows, Grows and a note to the teacher. Set `DEFAULT_OBSERVATION_FRAMEWORK=silverleaf`.
+
 **`ALLOWED_LANGUAGES` narrows a deployment to the languages its teachers use**, and Kiswahili is now a supported language with speech recognition hints.
 
 Also fixed: reflection questions for English teachers could come out in another language or use a sample name from the prompt, and a missing speech key stopped a coaching session after scoring had succeeded.

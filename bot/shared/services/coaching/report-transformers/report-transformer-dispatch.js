@@ -13,6 +13,7 @@ const { transformHOTSToReportData } = require('./hots-report-transformer');
 const { transformTeachToReportData } = require('./teach-report-transformer');
 const { transformFICOToReportData } = require('./fico-report-transformer');
 const { transformMEWAKAToReportData } = require('./mewaka-report-transformer');
+const { transformSilverleafToReportData } = require('./silverleaf-report-transformer');
 
 const transformers = {
   oecd: transformOECDToReportData,
@@ -20,6 +21,7 @@ const transformers = {
   teach: transformTeachToReportData,
   fico: transformFICOToReportData,
   mewaka: transformMEWAKAToReportData,   // Tanzania CPD — Playwright HTML→PDF report
+  silverleaf: transformSilverleafToReportData,
 };
 
 /**
