@@ -11,6 +11,7 @@ const framework = require('../../bot/shared/services/coaching/frameworks/silverl
 const indicator = (id, level, evidence = 'At 02:10 the teacher said "pens down, eyes up".') => ({ id, level, evidence });
 const analysis = (over = {}) => ({
   executive_summary: 'A warm lesson.',
+  recording_start: { shows_lesson_start: true, evidence: "[00:02] 'Good morning class.'" },
   indicators: [indicator('1A.ii', 3), indicator('1C.iv', 2), indicator('3B.ii', 4), indicator('3C.iii', null, '')],
   action_step: {
     text: 'When circulating during independent practice, follow a planned monitoring pathway.',
@@ -277,6 +278,103 @@ describe('the action step', () => {
       expect(a.observation_record.action_step).toBe(long.trim());
       expect(a.observation_record.needs_review).toBe(true);
     });
+  });
+});
+
+describe('a recording that may start mid-lesson', () => {
+  // Live: a video starting mid-lesson produced the action step "At lesson start, write a SMART objective on the board",
+  // citing "no objective at 00:00". A recording that starts late cannot show what happened before it began.
+  const GOOD = 'After each example, cold-call three students across the room.';
+  const missing = 'You did not begin with a visible objective; the lesson opening lacked a clear competency statement.';
+  const started = { shows_lesson_start: true, evidence: "[00:03] 'Good morning class, today we will learn fractions.'" };
+  const scored = (over = {}) => framework.computeScores(analysis({
+    recording_start: undefined,
+    indicators: [indicator('3A.i', 2), indicator('1A.ii', 4)],
+    grows: [missing, 'Most checks were choral.'],
+    action_step: { text: GOOD, category: 'Learning/Rigor', type: 'Other', grow_number: 2 },
+    ...over,
+  }));
+
+  describe('with no proof it shows the lesson start', () => {
+    test('Lesson Opening is not observed, and does not count in the score', () => {
+      const a = scored();
+      expect(a.indicators.find((i) => i.id === '3A.i').level).toBeNull();
+      expect(a.scores.rated_indicators).toBe(1);
+    });
+
+    test('a grow about a missing objective is removed', () => {
+      expect(scored().observation_record.grows).toEqual(['Most checks were choral.']);
+    });
+
+    test('the grow left is still the source, even though removing one renumbered them', () => {
+      expect(scored().observation_record.source_grow).toBe('Most checks were choral.');
+    });
+
+    test('a step drawn from that grow goes back to be rewritten', () => {
+      const a = scored({ action_step: { text: GOOD, category: 'Learning/Rigor', type: 'Other', grow_number: 1 } });
+      expect(a.observation_record.source_grow).toBeNull();
+      expect(framework.revisionPrompt(a)).toContain('Most checks were choral.');
+    });
+
+    test('a step about the opening goes back, whichever grow it names', () => {
+      const a = scored({ action_step: { text: 'At lesson start, write a single SMART objective on the board.', category: 'Learning/Rigor', type: 'Other', grow_number: 2 } });
+      expect(a.observation_record.needs_review).toBe(true);
+      expect(framework.revisionPrompt(a)).toMatch(/recording may have started/i);
+    });
+
+    test('a revision about the opening is refused', () => {
+      const a = scored({ action_step: { text: 'At lesson start, write a single SMART objective on the board.', category: 'Learning/Rigor', type: 'Other', grow_number: 2 } });
+      const reply = JSON.stringify({ grow_number: 1, action_step: 'State the objective at the start of the lesson.', how: [] });
+      expect(framework.applyRevision(a, reply).observation_record.needs_review).toBe(true);
+    });
+
+    test('the claim is cut from the summary and the teacher note, and the rest stays', () => {
+      const a = scored({
+        executive_summary: 'The class was calm. You did not open with a clear objective. Practice was brisk.',
+        notes_for_teacher: 'You ran a warm lesson. Next, start with a clear, visible objective. I am confident in you.',
+      });
+      expect(a.executive_summary).toBe('The class was calm. Practice was brisk.');
+      expect(a.observation_record.notes_for_teacher).toBe('You ran a warm lesson. I am confident in you.');
+    });
+
+    test('a claim of a missing exit ticket is treated the same way: a recording can end early too', () => {
+      const a = scored({ grows: ['No exit ticket was given at the end of the lesson.', 'Most checks were choral.'] });
+      expect(a.observation_record.grows).toEqual(['Most checks were choral.']);
+    });
+
+    test('other grows that merely mention a competency stay', () => {
+      const a = scored({ grows: ['Practice did not match the rigor of the competency.', 'Most checks were choral.'] });
+      expect(a.observation_record.grows).toHaveLength(2);
+    });
+
+    test('the record says why', () => {
+      expect(scored().observation_record.lesson_start_seen).toBe(false);
+    });
+  });
+
+  describe('with proof', () => {
+    const shown = (over) => scored({ recording_start: started, ...over });
+
+    test('Lesson Opening can be scored, and a missing objective can be raised', () => {
+      const a = shown();
+      expect(a.indicators.find((i) => i.id === '3A.i').level).toBe(2);
+      expect(a.observation_record.grows).toContain(missing);
+      expect(a.observation_record.lesson_start_seen).toBe(true);
+    });
+  });
+
+  test.each([
+    [{ shows_lesson_start: true, evidence: '' }],
+    [{ shows_lesson_start: 'true', evidence: 'quote' }],
+    [{ shows_lesson_start: false, evidence: 'quote' }],
+  ])('%j is not proof', (recordingStart) => {
+    expect(scored({ recording_start: recordingStart }).observation_record.lesson_start_seen).toBe(false);
+  });
+
+  test('the prompt tells the scorer to prove it, and warns about the end too', () => {
+    expect(framework.getSystemPrompt()).toMatch(/recording may start after the lesson began/i);
+    expect(framework.getSystemPrompt()).toMatch(/end before the lesson did/i);
+    expect(framework.buildAnalysisPrompt('t')).toContain('"recording_start"');
   });
 });
 

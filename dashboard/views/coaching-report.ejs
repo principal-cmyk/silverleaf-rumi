@@ -37,6 +37,9 @@
           <%= report.scores.overall_percentage %>% across the <%= report.scores.rated_indicators %> indicators this lesson could show,
           out of <%= report.scores.total_indicators %>. Indicators not observed do not lower this score.
         </p>
+        <% if (report.record.lesson_start_seen === false) { %>
+          <p class="text-sm text-gray-500 mt-2">This recording does not show the start of the lesson, so the lesson opening is not observed.</p>
+        <% } %>
       </div>
 
       <div class="bg-white rounded-lg shadow p-6 space-y-3">

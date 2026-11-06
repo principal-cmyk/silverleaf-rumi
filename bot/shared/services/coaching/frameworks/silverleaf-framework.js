@@ -16,6 +16,14 @@ const LEVELS = ['Pre-Novice', 'Novice', 'Proficient', 'Advanced', 'Exceptional']
 const LEVEL_MAX = LEVELS.length;
 const MAX_MESSAGE_CHARS = 3800;
 const MAX_ACTION_STEP_WORDS = 35;
+const LESSON_OPENING_INDICATOR = '3A.i';
+
+// A teacher films part of a lesson, often starting after it began and stopping before it ends. So anything only the
+// very start or end could show is unknown, and saying it was missing is a false claim. A rule in the prompt did not
+// hold (a live action step read "At lesson start, write a SMART objective", citing "no objective at 00:00"), so the
+// claims are removed in code unless the scorer can quote the recording showing the real start.
+const BOUNDARY_TOPIC = /\b(objective|learning (goal|target|aim|intention)|lesson (aim|goal|target)|success criteria|agenda|exit ticket|lesson opening|lesson closing|hook|(open|start|begin|beginning|opening|frame|framing|close|closing|end)\w* (of |to )?(the |your |each |every )?lesson|lesson (start|end)|at the start|competency statement)\b/i;
+const NEGATIVE_CLAIM = /\b(no|not|never|without|lack\w*|miss\w*|fail\w*|did ?n.t|absent|unclear|next|should|start with|begin with|add)\b/i;
 
 const SUBSTRANDS = [
   {
@@ -165,6 +173,7 @@ RATING RULES
 - If this lesson gives no evidence for an indicator, set level to null and evidence to "". Not observed is different from Pre-Novice, which means the teacher had the chance and made no attempt. Never score an indicator from an assumption.
 - The percentages in the rubric are of the moments you can observe, so treat them as a guide and do not claim precision the recording cannot support.
 - Things a recording cannot show, such as what students could explain afterwards, need direct evidence or a null.
+- A recording may start after the lesson began, and may end before the lesson did. Never treat what is missing from the first or last moments as missing from the lesson. Do not say an objective, agenda, hook, exit ticket or closing was absent unless the recording clearly covers that part of the lesson. Set shows_lesson_start to true only if you can quote the teacher really starting the lesson, such as a greeting or "today we will". Starting with teaching already under way is false.
 - Visual evidence comes from the sampled moments of the video. It maps to the rubric: order and off-task counts to 1A.ii, 1C.ii and 1C.iv; teacher response to off-task students to 1A.iii and 1C.iv; circulation and leaning in to 3B.ii and 3C.ii; raised hands to 3A.iv and 3C.ii.
 
 GET BETTER FASTER SCOPE & SEQUENCE
@@ -218,6 +227,7 @@ Return JSON only, in exactly this shape. Include every indicator: ${INDICATORS.m
   "executive_summary": "2-3 sentences on this lesson.",
   "subject": "the subject taught, if clear",
   "topic": "the topic taught, if clear",
+  "recording_start": { "shows_lesson_start": true or false, "evidence": "a quote showing the real start of the lesson, or empty" },
   "indicators": [{ "id": "1A.i", "level": 1 to 5 or null, "evidence": "timestamp, quote or count, or empty if not observed" }],
   "glows": ["3-5 items"],
   "grows": ["2-3 items"],
@@ -233,6 +243,20 @@ Return JSON only, in exactly this shape. Include every indicator: ${INDICATORS.m
   },
   "notes_for_teacher": "3-5 sentences to the teacher"
 }`;
+}
+
+function showsLessonStart(analysis) {
+  const start = analysis.recording_start || {};
+  return start.shows_lesson_start === true && typeof start.evidence === 'string' && start.evidence.trim().length > 0;
+}
+
+/** A sentence saying something at the very start or end of the lesson was missing, or should be added there. */
+function claimsBoundaryGap(text) {
+  return BOUNDARY_TOPIC.test(text) && NEGATIVE_CLAIM.test(text);
+}
+
+function withoutBoundaryClaims(text) {
+  return String(text || '').split(/(?<=[.!?])\s+/).filter((sentence) => !claimsBoundaryGap(sentence)).join(' ').trim();
 }
 
 function cleanIndicators(raw) {
@@ -261,17 +285,23 @@ function matchSkill(category, named) {
   return skills.find((skill) => String(named || '').toLowerCase().startsWith(skill.toLowerCase())) || null;
 }
 
-/** The grow a step closes goes first, so the conversation and the report lead with it. */
-function withSourceGrow(grows, number) {
+/**
+ * The grow a step closes goes first, so the conversation and the report lead with it. It is found before any grow is
+ * removed, so the number the model gave still points at the same grow.
+ */
+function withSourceGrow(grows, number, keep = () => true) {
   const valid = Number.isInteger(number) && number >= 1 && number <= grows.length;
-  if (!valid) return { grows, source: null };
-  const source = grows[number - 1];
-  return { grows: [source, ...grows.filter((_, i) => i !== number - 1)], source };
+  const namedIndex = valid ? number - 1 : -1;
+  const kept = grows.filter(keep);
+  if (namedIndex < 0 || !keep(grows[namedIndex])) return { grows: kept, source: null };
+  const others = grows.filter((grow, i) => i !== namedIndex && keep(grow));
+  return { grows: [grows[namedIndex], ...others], source: grows[namedIndex] };
 }
 
-function cleanRecord(analysis, overallLevel) {
+function cleanRecord(analysis, overallLevel, lessonStartSeen) {
   const step = analysis.action_step || {};
-  const sourced = withSourceGrow(stringList(analysis.grows, 3), step.grow_number);
+  const keep = lessonStartSeen ? () => true : (grow) => !claimsBoundaryGap(grow);
+  const sourced = withSourceGrow(stringList(analysis.grows, 3), step.grow_number, keep);
   const category = TYPES_BY_CATEGORY[step.category] ? step.category : null;
   const type = category && TYPES_BY_CATEGORY[category].includes(step.type) ? step.type : (category ? 'Other' : null);
   return {
@@ -286,6 +316,7 @@ function cleanRecord(analysis, overallLevel) {
     glows: stringList(analysis.glows, 5),
     grows: sourced.grows,
     source_grow: sourced.source,
+    lesson_start_seen: lessonStartSeen,
     notes_for_teacher: typeof analysis.notes_for_teacher === 'string' ? analysis.notes_for_teacher.trim() : '',
     overall_level: overallLevel,
   };
@@ -309,6 +340,9 @@ function actionStepProblems(record) {
   if (isActionStepTooLong(record.action_step)) problems.push(`it is over ${MAX_ACTION_STEP_WORDS} words`);
   if (!isSingleMove(record.action_step)) problems.push('it chains several moves instead of naming one behaviour');
   if (!record.source_grow) problems.push('it is not tied to one of the grows');
+  if (!record.lesson_start_seen && BOUNDARY_TOPIC.test(record.action_step)) {
+    problems.push('it is about the start or end of the lesson, and the recording may have started late or stopped early, so nothing shows that was missing');
+  }
   return problems;
 }
 
@@ -339,7 +373,7 @@ function applyRevision(analysis, reply) {
   const record = analysis.observation_record;
   const text = typeof revised.action_step === 'string' ? revised.action_step.trim() : '';
   const sourced = withSourceGrow(record.grows, revised.grow_number);
-  const candidate = { action_step: text, source_grow: sourced.source };
+  const candidate = { action_step: text, source_grow: sourced.source, lesson_start_seen: record.lesson_start_seen };
   if (!text || actionStepProblems(candidate).length > 0) return analysis;
 
   Object.assign(record, candidate, { grows: sourced.grows, needs_review: false });
@@ -368,12 +402,19 @@ function withReportShapes(analysis, record) {
 }
 
 function computeScores(analysis) {
-  const indicators = cleanIndicators(analysis.indicators);
+  const lessonStartSeen = showsLessonStart(analysis);
+  const indicators = cleanIndicators(analysis.indicators).map((indicator) => (
+    !lessonStartSeen && indicator.id === LESSON_OPENING_INDICATOR ? { ...indicator, level: null, evidence: '' } : indicator
+  ));
   const rated = indicators.filter((i) => i.level !== null);
   const marks = rated.reduce((sum, i) => sum + i.level, 0);
   const max = rated.length * LEVEL_MAX;
   const overallLevel = rated.length > 0 ? LEVELS[Math.round(marks / rated.length) - 1] : null;
-  const record = cleanRecord(analysis, overallLevel);
+  const record = cleanRecord(analysis, overallLevel, lessonStartSeen);
+  if (!lessonStartSeen) {
+    analysis.executive_summary = withoutBoundaryClaims(analysis.executive_summary);
+    record.notes_for_teacher = withoutBoundaryClaims(record.notes_for_teacher);
+  }
 
   analysis.indicators = indicators;
   analysis.substrand_scores = substrandScores(indicators);
