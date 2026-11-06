@@ -46,3 +46,28 @@ test('video counts say how many moments they rest on', () => {
   expect(partial).toMatch(/teacherSeen/);
   expect(partial).toMatch(/readable/);
 });
+
+describe('filtering the coaching page', () => {
+  const { getCoachingSessions } = require(path.join(root, 'services', service));
+
+  /** Every $n in a query must have a value: Postgres refuses the query otherwise. */
+  function expectPlaceholdersMatch(sql, params) {
+    const used = [...sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1]));
+    expect(used.length === 0 ? 0 : Math.max(...used)).toBe(params.length);
+    expect(new Set(used).size).toBe(params.length);
+  }
+
+  test.each([
+    ['all', null, null], ['completed', null, null], ['failed', null, null], ['cancelled', null, null],
+    ['in_progress', null, null], ['all', '2026-11-01', null], ['all', null, '2026-11-30'], ['completed', '2026-11-01', '2026-11-30'],
+  ])('status %s, from %s, to %s sends a valid query', async (status, from, to) => {
+    const calls = [];
+    const db = { query: jest.fn(async (sql, params) => {
+      calls.push([sql, params]);
+      return /COUNT\(\*\)/.test(sql) ? { rows: [{ total: '0' }] } : { rows: [] };
+    }) };
+    await getCoachingSessions(db, 1, 10, status, from, to);
+    expect(calls).toHaveLength(2);
+    calls.forEach(([sql, params]) => expectPlaceholdersMatch(sql, params));
+  });
+});

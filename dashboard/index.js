@@ -49,6 +49,7 @@ const {
 } = require('./database/queries');
 
 // Coaching Observability Service
+const { getSessionReport, buildReportView } = require('./services/coaching-report.service');
 const { getCoachingSessions, getStatusStats } = require('./services/coaching-observability.service');
 
 // Transcript UX Helpers 
@@ -1301,6 +1302,30 @@ app.get('/observability/coaching',
       title: 'Error',
       message: 'Failed to load coaching sessions',
       error: error.message
+    });
+  }
+});
+
+// One lesson's full report. Same access rules as the list, read through the same scoped client.
+app.get('/observability/coaching/:sessionId/report',
+  requireAuth,
+  requirePartnerAdmin,
+  requireFeatureAccess('coaching'),
+  async (req, res) => {
+  try {
+    const row = await getSessionReport(req.dbClient, req.params.sessionId);
+    if (!row) {
+      return res.status(404).render('error', {
+        title: 'Not found', message: 'That coaching session was not found', error: '',
+      });
+    }
+    res.render('coaching-report', { title: 'Observation report', report: buildReportView(row) });
+  } catch (error) {
+    console.error('Coaching report error:', error);
+    res.status(500).render('error', {
+      title: 'Error',
+      message: 'Failed to load the coaching report',
+      error: error.message,
     });
   }
 });

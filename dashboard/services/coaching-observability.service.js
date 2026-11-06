@@ -81,11 +81,13 @@ async function getCoachingSessions(dbClient, page = 1, limit = 10, statusFilter 
     LIMIT $1 OFFSET $2
   `;
 
+  // The count has no LIMIT or OFFSET, so its filter values start at $1, not $3.
+  const countWhereClause = whereClause.replace(/\$(\d+)/g, (_, n) => `$${Number(n) - 2}`);
   const countQuery = `
     SELECT COUNT(*) as total
     FROM coaching_sessions cs
     INNER JOIN users u ON cs.user_id = u.id
-    ${whereClause}
+    ${countWhereClause}
   `;
 
   try {

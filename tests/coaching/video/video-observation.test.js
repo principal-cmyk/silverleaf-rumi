@@ -135,6 +135,20 @@ describe('evidenceText', () => {
     expect(evidenceText([frame(30, {}, { position: 'not_visible' })], 1)).toMatch(/teacher was not visible/i);
   });
 
+  test('warns the scorer when the teacher was mostly out of shot: a live report said "you stayed at the front" from 7 of 19 stills', () => {
+    const stills = [
+      ...Array.from({ length: 6 }, (_, i) => frame(30 * (i + 1))),
+      ...Array.from({ length: 12 }, (_, i) => frame(300 + 30 * i, {}, { position: 'not_visible' })),
+    ];
+    const text = evidenceText(stills, 18);
+    expect(text).toMatch(/out of frame in 12 of 18/);
+    expect(text).toMatch(/do not say/i);
+  });
+
+  test('gives no such warning when the teacher was mostly in shot', () => {
+    expect(evidenceText([frame(30), frame(60), frame(90, {}, { position: 'not_visible' })], 3)).not.toMatch(/out of frame/);
+  });
+
   test('no readable stills means no evidence', () => {
     expect(evidenceText([], 6)).toBeNull();
   });

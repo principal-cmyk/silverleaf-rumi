@@ -64,7 +64,8 @@ across the lesson. Times match the transcript's timestamps. Use them as evidence
   To judge redirection, line up the moments students were off task with what the teacher said in the transcript around
   that time and where the teacher was standing.
 Refer to specific moments and counts where they matter, and let them shape your strengths and growth areas. Say
-"in the sampled moments", because stills can miss what happens between them. Absence from a still is not proof
+"in the sampled moments", because stills can miss what happens between them. Base a claim about the teacher's
+position only on stills where the teacher was visible, and give that count. Absence from a still is not proof
 something never happened. "unclear" and "not_visible" mean the camera could not tell, so say nothing about those.
 The transcript decides anything about what was said or taught.
 ${notes}`;

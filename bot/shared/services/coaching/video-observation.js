@@ -159,6 +159,9 @@ function evidenceText(observations, total) {
     s.teacherSeen > 0
       ? `- Teacher position, in ${s.teacherSeen} stills where visible: ${describeCounts(s.position, POSITION_WORDS)}. Moved between areas ${s.moves} times. Attending to one student or a small group in ${s.closeWork}, leaning in during ${s.leaningIn}.`
       : '- The teacher was not visible, so nothing can be said about circulation or proximity.',
+    ...(s.teacherSeen > 0 && s.teacherSeen < s.readable / 2
+      ? [`- The teacher was out of frame in ${s.readable - s.teacherSeen} of ${s.readable} stills, so these position counts cover only part of the lesson. Do not say the teacher stayed in one place or did not circulate. The teacher may have been moving out of shot.`]
+      : []),
     'Timeline:',
     ...observations.map(timelineLine),
   ];
