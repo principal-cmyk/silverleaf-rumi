@@ -145,6 +145,23 @@ describe('evidenceText', () => {
     expect(text).toMatch(/do not say/i);
   });
 
+  test('then withholds the position data: a warning alone failed live, because the numbers invited the conclusion', () => {
+    const stills = [
+      ...Array.from({ length: 6 }, (_, i) => frame(30 * (i + 1), { hands_raised: 'few' }, { note: 'Teacher near the board.' })),
+      ...Array.from({ length: 12 }, (_, i) => frame(300 + 30 * i, {}, { position: 'not_visible' })),
+    ];
+    const text = evidenceText(stills, 18);
+    expect(text).not.toMatch(/at the front in/);
+    expect(text).not.toMatch(/Moved between areas/);
+    expect(text).not.toMatch(/teacher front/);
+    expect(text).not.toMatch(/near the board/);
+    expect(text).toMatch(/hands few/);
+  });
+
+  test('keeps the position data when the teacher was mostly in shot', () => {
+    expect(evidenceText([frame(30), frame(60), frame(90, {}, { position: 'not_visible' })], 3)).toMatch(/at the front in 2/);
+  });
+
   test('gives no such warning when the teacher was mostly in shot', () => {
     expect(evidenceText([frame(30), frame(60), frame(90, {}, { position: 'not_visible' })], 3)).not.toMatch(/out of frame/);
   });
@@ -167,6 +184,16 @@ describe('chatSummary', () => {
 
   test('stays quiet when nothing could be read', () => {
     expect(chatSummary(summarise([], 6))).toBeNull();
+  });
+
+  test('gives no position counts when the teacher was mostly out of shot', () => {
+    const text = chatSummary(summarise([
+      frame(30),
+      ...Array.from({ length: 5 }, (_, i) => frame(60 + 30 * i, {}, { position: 'not_visible' })),
+    ], 6));
+    expect(text).toMatch(/out of shot/i);
+    expect(text).not.toMatch(/at the front/);
+    expect(text).not.toMatch(/moved between areas/);
   });
 
   test('does not comment on teacher movement the camera could not see', () => {

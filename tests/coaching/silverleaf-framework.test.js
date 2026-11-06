@@ -19,6 +19,7 @@ const analysis = (over = {}) => ({
     gbf_phase: 'Phase 2',
     gbf_skill: 'Monitor Aggressively',
     rationale: 'Back rows were not checked.',
+    grow_number: 1,
   },
   glows: ['Glow one', 'Glow two', 'Glow three'],
   grows: ['Grow one', 'Grow two'],
@@ -155,9 +156,10 @@ describe('the observation record', () => {
     expect(r.gbf_skill).toBe('Monitor Aggressively');
   });
 
-  test('flags an action step too long for the school rule, so it can be sent back', () => {
-    expect(framework.isActionStepTooLong('word '.repeat(50))).toBe(true);
-    expect(framework.isActionStepTooLong('When circulating, follow a planned monitoring pathway.')).toBe(false);
+  test('strips numbering a model added, which the teacher message would number again', () => {
+    const r = record({ glows: ['1) A glow'], grows: ['2. A grow', '3 - Another', 'Grade 4 pupils were unsure'] });
+    expect(r.glows).toEqual(['A glow']);
+    expect(r.grows).toEqual(['A grow', 'Another', 'Grade 4 pupils were unsure']);
   });
 
   test('keeps to the form limits: at most 5 glows and 3 grows', () => {
@@ -174,33 +176,130 @@ describe('the observation record', () => {
   });
 });
 
-describe('an action step over the school limit', () => {
-  const longStep = `During practice ${'check every student and mark their work '.repeat(6)}`;
-  const scoredLong = () => framework.computeScores(analysis({ action_step: { text: longStep, category: 'Learning/Rigor', type: 'Other' } }));
+describe('the action step', () => {
+  const GOOD = 'During independent practice, check the back row first using a planned monitoring pathway.';
+  const step = (text, over = {}) => ({ text, category: 'Learning/Rigor', type: 'Other', grow_number: 1, ...over });
+  const scored = (text, over) => framework.computeScores(analysis({ action_step: step(text, over) }));
+  const revision = (over = {}) => JSON.stringify({ grow_number: 2, action_step: GOOD, how: ['Start at the back'], ...over });
 
-  test('is sent back with the rule, keeping its intent', () => {
-    expect(framework.revisionPrompt(scoredLong())).toMatch(/35 words/);
-    expect(framework.revisionPrompt(scoredLong())).toContain('During practice');
+  describe('must be drawn from the grows', () => {
+    test('the grow it comes from moves to first place and is recorded', () => {
+      const r = scored(GOOD, { grow_number: 2 }).observation_record;
+      expect(r.source_grow).toBe('Grow two');
+      expect(r.grows).toEqual(['Grow two', 'Grow one']);
+    });
+
+    test('the report shapes follow that order', () => {
+      expect(scored(GOOD, { grow_number: 2 }).growth_opportunities[0].observation).toBe('Grow two');
+    });
+
+    test.each([[undefined], [0], [3], ['1'], [1.5]])('grow_number %p names no grow, so the step goes back', (n) => {
+      const a = scored(GOOD, { grow_number: n });
+      expect(a.observation_record.source_grow).toBeNull();
+      expect(framework.revisionPrompt(a)).toMatch(/Grow one/);
+    });
+
+    test('the prompt requires it, and asks for the grows first', () => {
+      expect(framework.getSystemPrompt()).toMatch(/drawn from one of the grows/i);
+      const prompt = framework.buildAnalysisPrompt('t');
+      expect(prompt.indexOf('"grows"')).toBeLessThan(prompt.indexOf('"action_step"'));
+      expect(prompt).toContain('"grow_number"');
+    });
   });
 
-  test('the shortened step still speaks to the teacher: a live run came back as "Teacher will..."', () => {
-    expect(framework.revisionPrompt(scoredLong())).toMatch(/never with the word "Teacher"/);
+  describe('must be a single move', () => {
+    test.each([
+      ['During whole-class practice, use a short monitoring pathway: scan and note answers from three students across the room (left, middle, right), quickly mark one common error, and praise one correct approach before reteaching.'],
+      ['During each 30-second partner rehearsal, follow a short monitoring pathway: scan, listen to three students, give one quick correction, then cold-call a partner to repeat.'],
+      ['Check the back row; then reteach the error.'],
+      ['Check three students and then reteach.'],
+    ])('rejects a chain: %s', (text) => {
+      expect(framework.isSingleMove(text)).toBe(false);
+    });
+
+    test.each([
+      [GOOD],
+      ['After every example, cold-call three students across the room.'],
+      ['During independent practice, circulate to the back row first.'],
+    ])('accepts one move: %s', (text) => {
+      expect(framework.isSingleMove(text)).toBe(true);
+    });
+
+    test('the prompt asks for one move and puts the rest in the How', () => {
+      expect(framework.getSystemPrompt()).toMatch(/single high-leverage/i);
+      expect(framework.getSystemPrompt()).toMatch(/How/);
+    });
   });
 
-  test('one within the limit needs no revision', () => {
-    expect(framework.revisionPrompt(framework.computeScores(analysis()))).toBeNull();
-  });
+  describe('when it breaks a rule', () => {
+    const long = `During practice ${'check every student '.repeat(14)}`;
 
-  test('a good revision replaces it everywhere the report reads it', () => {
-    const scored = framework.applyRevision(scoredLong(), 'Follow a planned monitoring pathway during practice.');
-    expect(scored.observation_record.action_step).toBe('Follow a planned monitoring pathway during practice.');
-    expect(scored.recommendations[0]).toBe('Follow a planned monitoring pathway during practice.');
-    expect(scored.growth_opportunities[0].strategies[0]).toBe('Follow a planned monitoring pathway during practice.');
-  });
+    test('a good step needs no revision and no review', () => {
+      const a = scored(GOOD);
+      expect(framework.revisionPrompt(a)).toBeNull();
+      expect(a.observation_record.needs_review).toBe(false);
+    });
 
-  test('a revision that is still too long or empty is ignored', () => {
-    expect(framework.applyRevision(scoredLong(), longStep).observation_record.action_step).toBe(longStep.trim());
-    expect(framework.applyRevision(scoredLong(), '  ').observation_record.action_step).toBe(longStep.trim());
+    test('it is sent back with the rules and the grows', () => {
+      const prompt = framework.revisionPrompt(scored(long));
+      expect(prompt).toMatch(/35 words/);
+      expect(prompt).toContain('During practice');
+      expect(prompt).toContain('1. Grow one');
+      expect(prompt).toMatch(/never with the word "Teacher"/);
+    });
+
+    test('it is flagged until fixed', () => {
+      expect(scored(long).observation_record.needs_review).toBe(true);
+    });
+
+    test('a good revision replaces it everywhere, follows the grow it names, and takes its How', () => {
+      const a = framework.applyRevision(scored(long), revision());
+      expect(a.observation_record).toMatchObject({
+        action_step: GOOD, source_grow: 'Grow two', how: ['Start at the back'], needs_review: false,
+      });
+      expect(a.observation_record.grows[0]).toBe('Grow two');
+      expect(a.recommendations[0]).toBe(GOOD);
+      expect(a.growth_opportunities[0].strategies[0]).toBe(GOOD);
+    });
+
+    test('a fenced reply still works', () => {
+      expect(framework.applyRevision(scored(long), `\`\`\`json\n${revision()}\n\`\`\``).observation_record.action_step).toBe(GOOD);
+    });
+
+    test.each([
+      ['still too long', () => revision({ action_step: long })],
+      ['still a chain', () => revision({ action_step: 'Check three students, then reteach.' })],
+      ['names no grow', () => revision({ grow_number: 9 })],
+      ['is not JSON', () => 'Just check the students.'],
+      ['is empty', () => '  '],
+    ])('a revision that %s changes nothing and stays flagged', (_, reply) => {
+      const a = framework.applyRevision(scored(long), reply());
+      expect(a.observation_record.action_step).toBe(long.trim());
+      expect(a.observation_record.needs_review).toBe(true);
+    });
+  });
+});
+
+describe('sending a step back', () => {
+  test('tries twice, and stops as soon as it is fixed', async () => {
+    jest.resetModules();
+    jest.doMock('../../bot/shared/config/supabase', () => ({}));
+    jest.doMock('jsonrepair', () => ({ jsonrepair: (s) => s }), { virtual: true });
+    const good = JSON.stringify({ grow_number: 1, action_step: 'After every example, cold-call three students.', how: [] });
+    const replies = [
+      JSON.stringify(analysis({ action_step: { text: 'Check three students, then reteach.', category: 'Learning/Rigor', type: 'Other', grow_number: 1 } })),
+      'not json', good,
+    ];
+    const usage = { prompt_tokens: 1, completion_tokens: 1 };
+    const create = jest.fn(async () => ({ choices: [{ message: { content: replies.shift() }, finish_reason: 'stop' }], usage }));
+    jest.doMock('../../bot/shared/services/llm-client', () => ({ getClient: () => ({ chat: { completions: { create } } }) }));
+    const GPT5 = require('../../bot/shared/services/gpt5-mini.service');
+    GPT5.openai = { chat: { completions: { create } } };
+    const fw = require('../../bot/shared/services/coaching/frameworks/silverleaf-framework');
+    const { analysis: out } = await GPT5.analyzePedagogy('transcript', {}, null, fw);
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(out.observation_record.action_step).toBe('After every example, cold-call three students.');
+    expect(out.observation_record.needs_review).toBe(false);
   });
 });
 

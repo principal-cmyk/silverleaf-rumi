@@ -171,13 +171,14 @@ GET BETTER FASTER SCOPE & SEQUENCE
 ${GBF_REFERENCE}
 
 ACTION STEP
-Choose ONE action step, the single highest-leverage change for student learning right now. It must:
+Write the grows first, then choose ONE action step: the single high-leverage change for student learning right now. It must:
+- Be drawn from one of the grows. Pick the grow that matters most for student learning, and write the step that closes exactly that gap. Say which grow in grow_number. A step that does not come from a grow is not allowed.
 - Be phrased as something the teacher WILL DO, not something to avoid.
 - Be precise enough that coach and teacher both know exactly what success looks like.
 - Be drawn from the GBF phase appropriate to this teacher's level, as shown by this lesson and any prior feedback. Where basic order or engagement is not in place, a management step comes before rigor.
-- Be one sentence or two short sentences at most, and no more than ${MAX_ACTION_STEP_WORDS} words. It names one behaviour, not a sequence of several. If you find yourself writing "and", cut back to the move that matters most.
+- Be one sentence or two short sentences at most, and no more than ${MAX_ACTION_STEP_WORDS} words. It names one behaviour, not a sequence. Never chain moves with "then", "and then", semicolons or a list after a colon. The extra moves belong in the How, which is 2-3 very short steps for carrying out that one behaviour.
 - Name its GBF skill from the same category. Teacher Radar is about seeing behaviour. Checking student work against an exemplar with a pathway or code is Monitor Aggressively.
-Weak: "Improve classroom management." Strong: "During independent practice, follow a planned monitoring pathway: check the fastest writers first, then move to students who need more support."
+Weak: "Improve classroom management." Strong: "During independent practice, check the back row first using a planned monitoring pathway."
 
 Classify it as Culture/Management or Learning/Rigor, then choose its type from exactly one list:
 Culture/Management: ${CULTURE_TYPES.join(' / ')}
@@ -186,7 +187,7 @@ Learning/Rigor: ${RIGOR_TYPES.join(' / ')}
 OBSERVATION NOTES
 The teacher reads these, so address the teacher as "you", never as "the teacher". Do not include raw timestamps ranges as a list; name the moment in words, with the minute where it helps. Call visual evidence "the sampled moments", never "photos".
 - Glows: 3-5 specific, evidence-based glows, each naming a concrete moment or behaviour, not a vague compliment. Example: "When transitioning from the Do Now to the main activity, you gave a crisp 3-word direction, 'pens down, eyes up', and waited for full compliance before moving on. This created a calm, focused transition."
-- Grows: 2-3 specific, evidence-based grows explaining the gap between what was observed and what the action step calls for. Reference specific moments. Be honest but constructive. Connect each one directly to the action step.
+- Grows: 2-3 specific, evidence-based grows, each explaining a gap between what was observed and what good practice calls for. The action step comes from one of these. Reference specific moments. Be honest but constructive.
 - Notes for the Teacher: 3-5 sentences written TO the teacher, not about them. Acknowledge their effort and a genuine strength, name the focus area with encouragement, express confidence in their growth. Warm, human, motivating, not generic.
 
 REMINDERS
@@ -218,8 +219,11 @@ Return JSON only, in exactly this shape. Include every indicator: ${INDICATORS.m
   "subject": "the subject taught, if clear",
   "topic": "the topic taught, if clear",
   "indicators": [{ "id": "1A.i", "level": 1 to 5 or null, "evidence": "timestamp, quote or count, or empty if not observed" }],
+  "glows": ["3-5 items"],
+  "grows": ["2-3 items"],
   "action_step": {
-    "text": "the one action step: what the teacher will work on",
+    "grow_number": "the number of the grow this step closes: 1 for the first grow, 2 for the second",
+    "text": "the one action step: one behaviour the teacher will work on",
     "how": ["2-3 very short steps for how to do it, e.g. Stand still", "Give a what-to-do direction", "Scan"],
     "category": "Culture/Management" or "Learning/Rigor",
     "type": "exactly one type from that category's list",
@@ -227,8 +231,6 @@ Return JSON only, in exactly this shape. Include every indicator: ${INDICATORS.m
     "gbf_skill": "e.g. Teacher Radar",
     "rationale": "one sentence on why this is the highest-leverage step"
   },
-  "glows": ["3-5 items"],
-  "grows": ["2-3 items"],
   "notes_for_teacher": "3-5 sentences to the teacher"
 }`;
 }
@@ -247,7 +249,10 @@ function cleanIndicators(raw) {
 }
 
 function stringList(value, max) {
-  return (Array.isArray(value) ? value : []).filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim()).slice(0, max);
+  return (Array.isArray(value) ? value : [])
+    .filter((v) => typeof v === 'string' && v.trim())
+    .map((v) => v.trim().replace(/^\d+\s*[.):-]\s*/, ''))
+    .slice(0, max);
 }
 
 /** The skill named, if it belongs to this category's trajectory. A mismatch is dropped, not trusted. */
@@ -256,8 +261,17 @@ function matchSkill(category, named) {
   return skills.find((skill) => String(named || '').toLowerCase().startsWith(skill.toLowerCase())) || null;
 }
 
+/** The grow a step closes goes first, so the conversation and the report lead with it. */
+function withSourceGrow(grows, number) {
+  const valid = Number.isInteger(number) && number >= 1 && number <= grows.length;
+  if (!valid) return { grows, source: null };
+  const source = grows[number - 1];
+  return { grows: [source, ...grows.filter((_, i) => i !== number - 1)], source };
+}
+
 function cleanRecord(analysis, overallLevel) {
   const step = analysis.action_step || {};
+  const sourced = withSourceGrow(stringList(analysis.grows, 3), step.grow_number);
   const category = TYPES_BY_CATEGORY[step.category] ? step.category : null;
   const type = category && TYPES_BY_CATEGORY[category].includes(step.type) ? step.type : (category ? 'Other' : null);
   return {
@@ -270,7 +284,8 @@ function cleanRecord(analysis, overallLevel) {
     commitment_question: seeNameDo.commitmentQuestion,
     rationale: step.rationale || '',
     glows: stringList(analysis.glows, 5),
-    grows: stringList(analysis.grows, 3),
+    grows: sourced.grows,
+    source_grow: sourced.source,
     notes_for_teacher: typeof analysis.notes_for_teacher === 'string' ? analysis.notes_for_teacher.trim() : '',
     overall_level: overallLevel,
   };
@@ -280,22 +295,57 @@ function isActionStepTooLong(text) {
   return String(text || '').trim().split(/\s+/).length > MAX_ACTION_STEP_WORDS;
 }
 
-/** The school's limit is a hard rule, so a long step goes back once. Null when it is already within the limit. */
-function revisionPrompt(analysis) {
-  const step = analysis.observation_record && analysis.observation_record.action_step;
-  if (!step || !isActionStepTooLong(step)) return null;
-  return `Shorten this teacher action step to no more than ${MAX_ACTION_STEP_WORDS} words, in one sentence or two short sentences. Keep the single most important behaviour, written directly to the teacher as an instruction that starts with a verb or a moment in the lesson, never with the word "Teacher". Keep it precise enough that success is obvious. Drop any extra steps. Reply with the action step only.
-
-${step}`;
+/**
+ * The school's rule is one high-leverage move. A list after a colon, "then" and semicolons are how a model smuggles
+ * several in, and a rule in the prompt alone did not stop it. The moves belong in the How.
+ */
+function isSingleMove(text) {
+  const step = String(text || '');
+  return !(/;/.test(step) || /\bthen\b/i.test(step) || /:[^.]*,/.test(step));
 }
 
-function applyRevision(analysis, revised) {
-  const text = typeof revised === 'string' ? revised.trim().replace(/^["']|["']$/g, '') : '';
-  if (!text || isActionStepTooLong(text)) return analysis;
-  analysis.observation_record.action_step = text;
-  analysis.recommendations = [text];
-  analysis.growth_opportunities = (analysis.growth_opportunities || []).map((g) => ({ ...g, strategies: [text] }));
-  return analysis;
+function actionStepProblems(record) {
+  const problems = [];
+  if (isActionStepTooLong(record.action_step)) problems.push(`it is over ${MAX_ACTION_STEP_WORDS} words`);
+  if (!isSingleMove(record.action_step)) problems.push('it chains several moves instead of naming one behaviour');
+  if (!record.source_grow) problems.push('it is not tied to one of the grows');
+  return problems;
+}
+
+/** Null when the step meets every rule. */
+function revisionPrompt(analysis) {
+  const record = analysis.observation_record;
+  if (!record || !record.action_step || !record.needs_review) return null;
+  return `This teacher action step breaks the school's rules: ${actionStepProblems(record).join('; ')}.
+
+Rewrite it as the single high-leverage step, drawn from the grow below that matters most for student learning. It must name one behaviour, in no more than ${MAX_ACTION_STEP_WORDS} words, in one sentence or two short sentences. Do not chain moves with "then", semicolons or a list after a colon: put the extra moves in "how". Write it directly to the teacher, starting with a verb or a moment in the lesson, never with the word "Teacher". Keep it precise enough that success is obvious.
+
+CURRENT STEP
+${record.action_step}
+
+GROWS
+${bullets(record.grows)}
+
+Reply with JSON only: { "grow_number": 1, "action_step": "...", "how": ["2-3 very short steps"] }`;
+}
+
+function applyRevision(analysis, reply) {
+  let revised;
+  try {
+    revised = JSON.parse(String(reply).replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''));
+  } catch {
+    return analysis;
+  }
+  const record = analysis.observation_record;
+  const text = typeof revised.action_step === 'string' ? revised.action_step.trim() : '';
+  const sourced = withSourceGrow(record.grows, revised.grow_number);
+  const candidate = { action_step: text, source_grow: sourced.source };
+  if (!text || actionStepProblems(candidate).length > 0) return analysis;
+
+  Object.assign(record, candidate, { grows: sourced.grows, needs_review: false });
+  const how = stringList(revised.how, 3);
+  if (how.length > 0) record.how = how;
+  return withReportShapes(analysis, record);
 }
 
 function substrandScores(indicators) {
@@ -305,6 +355,16 @@ function substrandScores(indicators) {
     const max = rated.length * LEVEL_MAX;
     return { id: s.id, title: s.title, strand: s.strand, score, max, rated: rated.length };
   });
+}
+
+/** The shapes the report narrative, prior-feedback history and commitment card already read. */
+function withReportShapes(analysis, record) {
+  analysis.strengths = record.glows.map((glow) => ({ title: glow, evidence: glow }));
+  analysis.growth_opportunities = record.grows.map((grow) => ({
+    area: record.type || 'Growth area', observation: grow, strategies: record.action_step ? [record.action_step] : [],
+  }));
+  analysis.recommendations = record.action_step ? [record.action_step] : [];
+  return analysis;
 }
 
 function computeScores(analysis) {
@@ -325,13 +385,8 @@ function computeScores(analysis) {
     rated_indicators: rated.length,
     total_indicators: INDICATORS.length,
   };
-  // The shapes the report narrative, prior-feedback history and commitment card already read.
-  analysis.strengths = record.glows.map((glow) => ({ title: glow, evidence: glow }));
-  analysis.growth_opportunities = record.grows.map((grow) => ({
-    area: record.type || 'Growth area', observation: grow, strategies: record.action_step ? [record.action_step] : [],
-  }));
-  analysis.recommendations = record.action_step ? [record.action_step] : [];
-  return analysis;
+  record.needs_review = !!record.action_step && actionStepProblems(record).length > 0;
+  return withReportShapes(analysis, record);
 }
 
 function getPerformanceBand(percentage) {
@@ -393,7 +448,7 @@ module.exports = {
   getPerformanceBand,
   getScoringConstants,
   reportChatMessages,
-  isActionStepTooLong,
+  isSingleMove,
   revisionPrompt,
   applyRevision,
 };

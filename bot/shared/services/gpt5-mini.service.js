@@ -404,10 +404,12 @@ CONVERSATIONAL FRAMEWORK: S.T.I.C.K.S. PRINCIPLES
       const analysisWithMarks = useFrameworkModule
         ? framework.computeScores(result, hasLessonPlanData)
         : this._computeMarksFromScores(result, hasLessonPlanData);
-      // A framework can send part of its answer back once to meet a hard rule. Failing that only costs the polish.
+      // A framework can send part of its answer back to meet a hard rule, twice at most. What still fails stays
+      // flagged in the framework's own record, so a coach sees it rather than a teacher being told it is fine.
       if (useFrameworkModule && typeof framework.revisionPrompt === 'function') {
-        const revision = framework.revisionPrompt(analysisWithMarks);
-        if (revision) {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const revision = framework.revisionPrompt(analysisWithMarks);
+          if (!revision) break;
           try {
             const revised = await this.openai.chat.completions.create({
               model: 'gpt-5-mini-2025-08-07',

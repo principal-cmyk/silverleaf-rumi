@@ -20,7 +20,7 @@ ${goal} Then ask: "What made that successful? What was the impact on your studen
   }
   if (questionNumber === 2) {
     return `THIS IS SEE THE GAP.
-Narrow the focus to one specific moment from the grows that connects to the action step area, with what the students were doing. Ask what they ideally wanted to see or hear at that moment, and what the gap was between that and what happened. Do not name the action step, and do not tell them the answer: the teacher names the gap. Pick up what they said in their last answer. ~40-60 words.`;
+Narrow the focus to one specific moment from the FIRST grow in the record, because that is the grow the action step comes from, with what the students were doing. Ask what they ideally wanted to see or hear at that moment, and what the gap was between that and what happened. Do not name the action step, and do not tell them the answer: the teacher names the gap. Pick up what they said in their last answer. ~40-60 words.`;
   }
   if (questionNumber === 3) {
     return `THIS IS NAME IT.

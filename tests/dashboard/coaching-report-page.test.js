@@ -109,6 +109,13 @@ describe('getSessionReport', () => {
 });
 
 describe('the page', () => {
+  test('shows which grow the step came from, and flags a step for review', () => {
+    expect(view).toContain('report.record.source_grow');
+    expect(view).toContain('report.record.needs_review');
+    const partial = fs.readFileSync(path.join(root, 'views/partials/observation-record.ejs'), 'utf8');
+    expect(partial).toContain('record.needs_review');
+  });
+
   test('keeps the same access rules as the coaching page', () => {
     const route = index.slice(index.indexOf("app.get('/observability/coaching/:sessionId/report'"));
     expect(route.slice(0, 200)).toMatch(/requireAuth,\s+requirePartnerAdmin,\s+requireFeatureAccess\('coaching'\)/);

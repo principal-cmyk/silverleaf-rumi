@@ -47,6 +47,7 @@ describe('the conversation', () => {
     expect(beat).toMatch(/ideally/i);
     expect(beat).toMatch(/gap/i);
     expect(beat).toMatch(/do not name the action step/i);
+    expect(beat).toMatch(/first grow/i);
   });
 
   test('Name It lets the teacher name it first', () => {

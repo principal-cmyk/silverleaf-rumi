@@ -137,12 +137,18 @@ function describeCounts(counts, words) {
   return Object.entries(counts).map(([key, n]) => `${words[key]} in ${n}`).join(', ');
 }
 
-function timelineLine(o) {
-  const parts = [
-    `order ${o.students.order}`, `hands ${o.students.hands_raised}`, `off task ${o.students.off_task}`,
-    `teacher ${o.teacher.position}, attending to ${o.teacher.interaction}, leaning in ${o.teacher.leaning_in}`,
-  ];
-  const notes = [o.students.activity, o.students.note, o.teacher.note].filter(Boolean).join(' ');
+/**
+ * Mostly out of shot means the position counts describe a fraction of the lesson. A warning beside them did not hold:
+ * given "front in 6 of 7", a live scorer still wrote that the teacher stayed at the front. So they are withheld.
+ */
+function teacherMostlyOutOfShot(stats) {
+  return stats.teacherSeen > 0 && stats.teacherSeen < stats.readable / 2;
+}
+
+function timelineLine(o, showTeacher) {
+  const parts = [`order ${o.students.order}`, `hands ${o.students.hands_raised}`, `off task ${o.students.off_task}`];
+  if (showTeacher) parts.push(`teacher ${o.teacher.position}, attending to ${o.teacher.interaction}, leaning in ${o.teacher.leaning_in}`);
+  const notes = [o.students.activity, o.students.note, showTeacher ? o.teacher.note : ''].filter(Boolean).join(' ');
   return `[${clock(o.atSeconds)}] ${parts.join('; ')}.${notes ? ` ${notes}` : ''}`;
 }
 
@@ -151,19 +157,21 @@ function evidenceText(observations, total) {
   if (observations.length === 0) return null;
   const s = summarise(observations, total);
   const unread = total - s.readable;
+  const outOfShot = teacherMostlyOutOfShot(s);
+  let teacherLine = '- The teacher was not visible, so nothing can be said about circulation or proximity.';
+  if (outOfShot) {
+    teacherLine = `- The teacher was out of frame in ${s.readable - s.teacherSeen} of ${s.readable} stills, so the video cannot show where they stood or whether they circulated. Do not say the teacher stayed in one place or did not circulate.`;
+  } else if (s.teacherSeen > 0) {
+    teacherLine = `- Teacher position, in ${s.teacherSeen} stills where visible: ${describeCounts(s.position, POSITION_WORDS)}. Moved between areas ${s.moves} times. Attending to one student or a small group in ${s.closeWork}, leaning in during ${s.leaningIn}.`;
+  }
   const lines = [
     `Counts from ${s.readable} readable stills${unread > 0 ? ` (${unread} could not be read)` : ''}:`,
     `- Order: ${describeCounts(s.order, ORDER_WORDS) || 'unclear'}.`,
     s.handsJudged > 0 ? `- Hands raised: seen in ${s.handsSeen} of ${s.handsJudged}.` : '- Hands raised: unclear.',
     s.offTaskJudged > 0 ? `- Students off task: seen in ${s.offTaskSeen} of ${s.offTaskJudged}.` : '- Students off task: unclear.',
-    s.teacherSeen > 0
-      ? `- Teacher position, in ${s.teacherSeen} stills where visible: ${describeCounts(s.position, POSITION_WORDS)}. Moved between areas ${s.moves} times. Attending to one student or a small group in ${s.closeWork}, leaning in during ${s.leaningIn}.`
-      : '- The teacher was not visible, so nothing can be said about circulation or proximity.',
-    ...(s.teacherSeen > 0 && s.teacherSeen < s.readable / 2
-      ? [`- The teacher was out of frame in ${s.readable - s.teacherSeen} of ${s.readable} stills, so these position counts cover only part of the lesson. Do not say the teacher stayed in one place or did not circulate. The teacher may have been moving out of shot.`]
-      : []),
+    teacherLine,
     'Timeline:',
-    ...observations.map(timelineLine),
+    ...observations.map((o) => timelineLine(o, !outOfShot)),
   ];
   return lines.join('\n');
 }
@@ -179,7 +187,9 @@ function chatSummary(stats) {
   if (order) lines.push(`• Order: ${order}.`);
   if (stats.handsJudged > 0) lines.push(`• Hands raised: seen in ${stats.handsSeen} of ${stats.handsJudged} moments.`);
   if (stats.offTaskJudged > 0) lines.push(`• Students off task: seen in ${stats.offTaskSeen} of ${stats.offTaskJudged} moments.`);
-  if (stats.teacherSeen > 0) {
+  if (teacherMostlyOutOfShot(stats)) {
+    lines.push('• You were out of shot for much of the lesson, so I cannot comment on movement around the room. A wider camera view would help.');
+  } else if (stats.teacherSeen > 0) {
     lines.push(`• Where you were, in ${stats.teacherSeen} moments I could see you: ${describeCounts(stats.position, POSITION_WORDS)}.`);
     lines.push(`• You moved between areas ${stats.moves} times and were working closely with a student or group in ${stats.closeWork} moments.`);
   } else {
