@@ -49,7 +49,7 @@ const {
 } = require('./database/queries');
 
 // Coaching Observability Service
-const { getSessionReport, buildReportView } = require('./services/coaching-report.service');
+const { getSessionReport, getTeacherTrend, buildReportView } = require('./services/coaching-report.service');
 const { getCoachingSessions, getStatusStats } = require('./services/coaching-observability.service');
 
 // Transcript UX Helpers 
@@ -1319,7 +1319,8 @@ app.get('/observability/coaching/:sessionId/report',
         title: 'Not found', message: 'That coaching session was not found', error: '',
       });
     }
-    res.render('coaching-report', { title: 'Observation report', report: buildReportView(row) });
+    const trend = await getTeacherTrend(req.dbClient, row);
+    res.render('coaching-report', { title: 'Observation report', report: buildReportView(row, trend) });
   } catch (error) {
     console.error('Coaching report error:', error);
     res.status(500).render('error', {

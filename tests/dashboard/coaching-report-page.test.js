@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '../../dashboard');
-const { buildReportView, getSessionReport } = require('../../dashboard/services/coaching-report.service');
+const { buildReportView, getSessionReport, getTeacherTrend } = require('../../dashboard/services/coaching-report.service');
 const view = fs.readFileSync(path.join(root, 'views/coaching-report.ejs'), 'utf8');
 const index = fs.readFileSync(path.join(root, 'index.js'), 'utf8');
 const list = fs.readFileSync(path.join(root, 'views/coaching.ejs'), 'utf8');
@@ -86,6 +86,63 @@ describe('buildReportView', () => {
 
   test('a lesson not yet analysed does not break', () => {
     expect(buildReportView(row({ analysis_data: null, conversation_state: null })).available).toBe(false);
+  });
+});
+
+describe('the summary and progress charts', () => {
+  test('each strand gets one score from its observed substrands only', () => {
+    expect(buildReportView(row()).strandSummary).toEqual([
+      { name: 'Climate & Culture', observed: true, percentage: 70, levelName: 'Advanced' },
+      { name: 'Lesson Delivery', observed: true, percentage: 40, levelName: 'Novice' },
+    ]);
+  });
+
+  test('a strand with nothing observed is not drawn as zero', () => {
+    const r = row();
+    r.analysis_data.substrand_scores[2] = { ...r.analysis_data.substrand_scores[2], score: 0, max: 0, rated: 0 };
+    const delivery = buildReportView(r).strandSummary[1];
+    expect(delivery).toMatchObject({ observed: false, percentage: null, levelName: null });
+  });
+
+  const trendRow = (id, date, pct) => ({ id, created_at: date, pct: String(pct), substrand_scores: row().analysis_data.substrand_scores });
+
+  test('one lesson is not a trend', () => {
+    const report = buildReportView(row(), [trendRow(row().id, row().created_at, 61.3)]);
+    expect(report.trend.chart).toBeNull();
+  });
+
+  test('the progress line runs oldest to newest, marks this lesson, and keeps a 0–100 axis', () => {
+    const report = buildReportView(row(), [
+      trendRow('a', '2026-10-01T08:00:00Z', 40),
+      trendRow('b', '2026-10-15T08:00:00Z', 100),
+      trendRow(row().id, row().created_at, 61.3),
+    ]);
+    const { chart, change } = report.trend;
+    expect(chart.marks.map((m) => m.pct)).toEqual([40, 100, 61]);
+    expect(chart.marks.map((m) => m.current)).toEqual([false, false, true]);
+    expect(change).toBe(21);
+    expect(chart.gridlines.map((g) => g.value)).toEqual([0, 25, 50, 75, 100]);
+    expect(chart.marks[1].y).toBe(chart.gridlines[4].y);
+    expect(chart.marks[0].tooltip).toContain('Climate & Culture 70%');
+  });
+});
+
+describe('getTeacherTrend', () => {
+  test('reads the same teacher\'s lessons of the same kind, up to this one, through the scoped client', async () => {
+    const db = { query: jest.fn(async () => ({ rows: [{ id: 'new' }, { id: 'old' }] })) };
+    const r = { ...row(), user_id: 'u1', observation_type: null };
+    const rows = await getTeacherTrend(db, r);
+    expect(rows.map((x) => x.id)).toEqual(['old', 'new']);
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toMatch(/observation_type IS NOT DISTINCT FROM \$2/);
+    expect(sql).toMatch(/created_at <= \$3/);
+    expect(params).toEqual(['u1', null, r.created_at]);
+  });
+
+  test('no teacher, no query', async () => {
+    const db = { query: jest.fn() };
+    await expect(getTeacherTrend(db, row())).resolves.toEqual([]);
+    expect(db.query).not.toHaveBeenCalled();
   });
 });
 

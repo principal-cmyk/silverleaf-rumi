@@ -6,6 +6,25 @@
   <title><%= title %> - Rumi Observability Portal</title>
   <link rel="icon" type="image/png" href="/images/rumi-logo.png">
   <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .rpt-grid { display: grid; gap: 1.5rem; }
+    @media (min-width: 768px) { .rpt-two { grid-template-columns: 1fr 1fr; } }
+    .rpt-bar-row { display: grid; grid-template-columns: minmax(8rem, 11rem) 1fr auto; gap: .75rem; align-items: center; }
+    @media (max-width: 520px) { .rpt-bar-row { grid-template-columns: 1fr auto; } .rpt-bar-track { grid-column: 1 / -1; grid-row: 2; } }
+    .rpt-bar-track { position: relative; height: 12px; border-radius: 4px; background: #eef1f6; overflow: hidden; }
+    .rpt-bar-fill { height: 100%; border-radius: 4px; background: #2f6fd6; }
+    .rpt-bar-none { height: 100%; border: 1px dashed #b8c0cc; border-radius: 4px; background: transparent; }
+    .rpt-ticks { position: absolute; inset: 0; background-image: linear-gradient(to right, rgba(255,255,255,.9) 1px, transparent 1px); background-size: 25% 100%; pointer-events: none; }
+    .rpt-chart { width: 100%; min-width: 480px; height: auto; display: block; }
+    .rpt-chart .grid { stroke: #e5e8ee; stroke-width: 1; }
+    .rpt-chart .axis { fill: #6b7280; font-size: 11px; }
+    .rpt-chart .line { fill: none; stroke: #2f6fd6; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .rpt-chart .dot { fill: #2f6fd6; stroke: #fff; stroke-width: 2; }
+    .rpt-chart .dot.current { fill: #fff; stroke: #2f6fd6; stroke-width: 3; }
+    .rpt-chart .hit { fill: transparent; cursor: default; }
+    .rpt-chart .hit:hover + .dot { stroke: #1d4f9e; }
+    .rpt-chart .val { fill: #111827; font-size: 12px; font-weight: 600; }
+  </style>
 </head>
 <body class="bg-coaching-gradient min-h-screen">
   <%- include("partials/navigation", { currentPage: "coaching", username: username, userRole: userRole }) %>
@@ -16,7 +35,7 @@
     <div class="bg-white rounded-lg shadow p-6">
       <h1 class="text-2xl font-bold text-gray-900">📋 Observation report</h1>
       <p class="text-gray-700 mt-1">
-        <%= report.teacher %><% if (report.school) { %> · <%= report.school %><% } %>
+        <%= report.teacher %><% if (report.classTaught) { %> · <%= report.classTaught %><% } %><% if (report.school) { %> · <%= report.school %><% } %>
         · <%= new Date(report.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) %>
         <% if (report.durationSeconds) { %> · <%= Math.floor(report.durationSeconds / 60) %>:<%= String(report.durationSeconds % 60).padStart(2, '0') %> min<% } %>
       </p>
@@ -31,14 +50,87 @@
         There is no full report for this lesson, because it was scored before the Silverleaf framework was in use.
       </div>
     <% } else { %>
-      <div class="bg-white rounded-lg shadow p-6">
-        <p class="text-3xl font-bold text-gray-900"><%= report.record.overall_level || 'Not rated' %></p>
-        <p class="text-gray-700">
-          <%= report.scores.overall_percentage %>% across the <%= report.scores.rated_indicators %> indicators this lesson could show,
-          out of <%= report.scores.total_indicators %>. Indicators not observed do not lower this score.
-        </p>
+      <div class="bg-white rounded-lg shadow p-6 space-y-4">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">📊 Summary</h2>
+          <p class="text-3xl font-bold text-gray-900 mt-2">
+            <%= report.record.overall_level || 'Not rated' %>
+            <span class="text-xl font-medium text-gray-500">· <%= Math.round(report.scores.overall_percentage) %>%</span>
+          </p>
+          <p class="text-sm text-gray-500">
+            Across the <%= report.scores.rated_indicators %> of <%= report.scores.total_indicators %> indicators this lesson could show.
+            Indicators not observed do not lower the score.
+          </p>
+        </div>
+
+        <div class="space-y-3" role="list" aria-label="Score by strand">
+          <% report.strandSummary.forEach((strand) => { %>
+            <div class="rpt-bar-row" role="listitem"
+                 title="<%= strand.name %>: <%= strand.observed ? `${strand.levelName} (${strand.percentage}%)` : 'not observed' %>">
+              <span class="text-sm font-medium text-gray-900"><%= strand.name %></span>
+              <div class="rpt-bar-track">
+                <% if (strand.observed) { %>
+                  <div class="rpt-bar-fill" style="width: <%= Math.max(2, strand.percentage) %>%"></div>
+                <% } else { %>
+                  <div class="rpt-bar-none"></div>
+                <% } %>
+                <div class="rpt-ticks"></div>
+              </div>
+              <span class="text-sm text-gray-700 whitespace-nowrap">
+                <% if (strand.observed) { %><%= strand.levelName %> · <%= strand.percentage %>%<% } else { %><span class="text-gray-500">Not observed</span><% } %>
+              </span>
+            </div>
+          <% }) %>
+        </div>
         <% if (report.record.lesson_start_seen === false) { %>
-          <p class="text-sm text-gray-500 mt-2">This recording does not show the start of the lesson, so the lesson opening is not observed.</p>
+          <p class="text-sm text-gray-500">This recording does not show the start of the lesson, so the lesson opening is not observed.</p>
+        <% } %>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6 space-y-3">
+        <h2 class="text-xl font-bold text-gray-900">📈 Progress over time</h2>
+        <% if (!report.trend.chart) { %>
+          <p class="text-sm text-gray-500">This is <%= report.teacher %>'s first lesson scored on the Silverleaf framework, so there is no trend yet. It will appear after the next one.</p>
+        <% } else { const c = report.trend.chart; %>
+          <p class="text-sm text-gray-700">
+            Overall score, last <%= report.trend.points %> lessons up to this one:
+            <span class="font-medium"><%= report.trend.change > 0 ? `up ${report.trend.change}` : report.trend.change < 0 ? `down ${-report.trend.change}` : 'no change of' %> points</span>
+            since <%= c.marks[0].label %>. Hover a point for its strand scores.
+          </p>
+          <div style="overflow-x: auto">
+            <svg class="rpt-chart" viewBox="0 0 <%= c.width %> <%= c.height %>" role="img"
+                 aria-label="Overall score by lesson, from <%= c.marks[0].pct %>% to <%= c.marks[c.marks.length - 1].pct %>%">
+              <% c.gridlines.forEach((g) => { %>
+                <line class="grid" x1="<%= c.left %>" x2="<%= c.width - c.right %>" y1="<%= g.y %>" y2="<%= g.y %>"></line>
+                <text class="axis" x="<%= c.left - 6 %>" y="<%= g.y + 4 %>" text-anchor="end"><%= g.value %>%</text>
+              <% }) %>
+              <path class="line" d="<%= c.path %>"></path>
+              <% c.marks.forEach((m, i) => { %>
+                <g>
+                  <title><%= m.tooltip %><%= m.current ? '\n(this lesson)' : '' %></title>
+                  <circle class="hit" cx="<%= m.x %>" cy="<%= m.y %>" r="14"></circle>
+                  <circle class="dot<%= m.current ? ' current' : '' %>" cx="<%= m.x %>" cy="<%= m.y %>" r="<%= m.current ? 6 : 4.5 %>"></circle>
+                  <% if (m.current) { %>
+                    <text class="val" x="<%= m.x %>" y="<%= m.y - 12 %>" text-anchor="middle"><%= m.pct %>%</text>
+                  <% } %>
+                  <% if (m.showLabel) { %>
+                    <text class="axis" x="<%= m.x %>" y="<%= c.height - c.bottom + 20 %>" text-anchor="middle"><%= m.label %></text>
+                  <% } %>
+                </g>
+              <% }) %>
+            </svg>
+          </div>
+          <details class="text-sm">
+            <summary class="cursor-pointer text-gray-500">Show as a table</summary>
+            <table class="mt-2 text-gray-700">
+              <thead><tr><th class="text-left pr-6">Lesson</th><th class="text-right">Overall</th></tr></thead>
+              <tbody>
+                <% c.marks.forEach((m) => { %>
+                  <tr><td class="pr-6"><%= m.label %><%= m.current ? ' (this lesson)' : '' %></td><td class="text-right"><%= m.pct %>%</td></tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </details>
         <% } %>
       </div>
 
@@ -49,60 +141,71 @@
             A coach should review this step. It did not fully meet the rules: one move, drawn from the grows.
           </p>
         <% } %>
-        <p class="text-gray-900"><%= report.record.action_step %></p>
+        <p class="text-gray-900 font-medium"><%= report.record.action_step %></p>
         <% if (report.record.how && report.record.how.length) { %>
           <ol class="list-decimal ml-5 text-gray-700">
             <% report.record.how.forEach((step) => { %><li><%= step %></li><% }) %>
           </ol>
         <% } %>
-        <p class="text-sm text-gray-500"><%= [report.record.category, report.record.type, report.record.gbf_phase, report.record.gbf_skill].filter(Boolean).join(' · ') %></p>
-        <% if (report.record.source_grow) { %>
-          <p class="text-sm text-gray-700"><span class="font-medium">Drawn from this grow:</span> <%= report.record.source_grow %></p>
+        <% if (report.record.source_grow || report.record.rationale) { %>
+          <details class="text-sm text-gray-700">
+            <summary class="cursor-pointer text-gray-500">Why this step</summary>
+            <p class="text-gray-500 mt-2"><%= [report.record.category, report.record.type, report.record.gbf_phase, report.record.gbf_skill].filter(Boolean).join(' · ') %></p>
+            <% if (report.record.source_grow) { %>
+              <p class="mt-1"><span class="font-medium">Drawn from this grow:</span> <%= report.record.source_grow %></p>
+            <% } %>
+            <% if (report.record.rationale) { %><p class="mt-1"><%= report.record.rationale %></p><% } %>
+          </details>
         <% } %>
-        <% if (report.record.rationale) { %><p class="text-sm text-gray-700"><%= report.record.rationale %></p><% } %>
       </div>
 
       <div class="bg-white rounded-lg shadow p-6 space-y-4">
-        <div>
-          <h2 class="text-xl font-bold text-gray-900">✨ Glows</h2>
-          <ul class="list-disc ml-5 text-gray-700"><% (report.record.glows || []).forEach((glow) => { %><li><%= glow %></li><% }) %></ul>
-        </div>
-        <div>
-          <h2 class="text-xl font-bold text-gray-900">🌱 Grows</h2>
-          <ul class="list-disc ml-5 text-gray-700"><% (report.record.grows || []).forEach((grow) => { %><li><%= grow %></li><% }) %></ul>
+        <div class="rpt-grid rpt-two">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900">✨ Glows</h2>
+            <ul class="list-disc ml-5 text-gray-700"><% (report.record.glows || []).forEach((glow) => { %><li><%= glow %></li><% }) %></ul>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-900">🌱 Grows</h2>
+            <ul class="list-disc ml-5 text-gray-700"><% (report.record.grows || []).forEach((grow) => { %><li><%= grow %></li><% }) %></ul>
+          </div>
         </div>
         <% if (report.record.notes_for_teacher) { %>
           <div>
-            <h2 class="text-xl font-bold text-gray-900">💬 Note for the teacher</h2>
+            <h2 class="text-lg font-bold text-gray-900">💬 Note for the teacher</h2>
             <p class="text-gray-700"><%= report.record.notes_for_teacher %></p>
           </div>
         <% } %>
       </div>
 
-      <% report.strands.forEach((strand) => { %>
-        <div class="bg-white rounded-lg shadow p-6 space-y-3">
-          <h2 class="text-xl font-bold text-gray-900"><%= strand.name %></h2>
-          <% strand.substrands.forEach((substrand) => { %>
-            <details class="border border-gray-200 rounded-lg p-3" <%= substrand.observed ? 'open' : '' %>>
-              <summary class="cursor-pointer font-medium text-gray-900">
-                <%= substrand.id %> <%= substrand.title %>:
-                <% if (substrand.observed) { %><%= substrand.levelName %> (<%= substrand.percentage %>%)<% } else { %>not observed<% } %>
-              </summary>
-              <div class="mt-3 divide-y text-sm">
-                <% substrand.indicators.forEach((indicator) => { %>
-                  <div class="py-2">
-                    <p class="font-medium text-gray-900"><%= indicator.name %>: <%= indicator.levelName %> (<%= indicator.level %> of 5)</p>
-                    <p class="text-gray-700"><%= indicator.evidence %></p>
-                  </div>
-                <% }) %>
-                <% if (substrand.notObserved.length) { %>
-                  <p class="py-2 text-gray-500">Not observed: <%= substrand.notObserved.join(', ') %></p>
-                <% } %>
-              </div>
-            </details>
-          <% }) %>
-        </div>
-      <% }) %>
+      <details class="bg-white rounded-lg shadow p-6">
+        <summary class="cursor-pointer text-xl font-bold text-gray-900">🔍 Evidence by indicator</summary>
+        <p class="text-sm text-gray-500 mt-2">What the scores above are based on, substrand by substrand.</p>
+        <% report.strands.forEach((strand) => { %>
+          <div class="mt-4 space-y-2">
+            <h3 class="font-bold text-gray-900"><%= strand.name %></h3>
+            <% strand.substrands.forEach((substrand) => { %>
+              <details class="border border-gray-200 rounded-lg p-3">
+                <summary class="cursor-pointer font-medium text-gray-900">
+                  <%= substrand.id %> <%= substrand.title %>:
+                  <% if (substrand.observed) { %><%= substrand.levelName %> (<%= substrand.percentage %>%)<% } else { %>not observed<% } %>
+                </summary>
+                <div class="mt-3 divide-y text-sm">
+                  <% substrand.indicators.forEach((indicator) => { %>
+                    <div class="py-2">
+                      <p class="font-medium text-gray-900"><%= indicator.name %>: <%= indicator.levelName %> (<%= indicator.level %> of 5)</p>
+                      <p class="text-gray-700"><%= indicator.evidence %></p>
+                    </div>
+                  <% }) %>
+                  <% if (substrand.notObserved.length) { %>
+                    <p class="py-2 text-gray-500">Not observed: <%= substrand.notObserved.join(', ') %></p>
+                  <% } %>
+                </div>
+              </details>
+            <% }) %>
+          </div>
+        <% }) %>
+      </details>
 
       <% if (report.videoEvidence) { %>
         <details class="bg-white rounded-lg shadow p-6">
@@ -113,15 +216,17 @@
       <% } %>
 
       <% if (report.reflection.length) { %>
-        <div class="bg-white rounded-lg shadow p-6 space-y-3">
-          <h2 class="text-xl font-bold text-gray-900">💭 Teacher's reflection</h2>
-          <% report.reflection.forEach((turn) => { %>
-            <div class="text-sm">
-              <p class="font-medium text-gray-900"><%= turn.question %></p>
-              <p class="text-gray-700"><%= turn.answer %></p>
-            </div>
-          <% }) %>
-        </div>
+        <details class="bg-white rounded-lg shadow p-6">
+          <summary class="cursor-pointer text-xl font-bold text-gray-900">💭 Teacher's reflection</summary>
+          <div class="space-y-3 mt-3">
+            <% report.reflection.forEach((turn) => { %>
+              <div class="text-sm">
+                <p class="font-medium text-gray-900"><%= turn.question %></p>
+                <p class="text-gray-700"><%= turn.answer %></p>
+              </div>
+            <% }) %>
+          </div>
+        </details>
       <% } %>
     <% } %>
   </div>
