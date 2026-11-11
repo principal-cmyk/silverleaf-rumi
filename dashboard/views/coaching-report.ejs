@@ -24,16 +24,39 @@
     .rpt-chart .hit { fill: transparent; cursor: default; }
     .rpt-chart .hit:hover + .dot { stroke: #1d4f9e; }
     .rpt-chart .val { fill: #111827; font-size: 12px; font-weight: 600; }
+    .rpt-download { display: inline-flex; align-items: center; gap: .4rem; padding: .5rem .9rem; border-radius: .5rem;
+      background: #2f6fd6; color: #fff; font-size: .875rem; font-weight: 600; white-space: nowrap; }
+    .rpt-download:hover { background: #255bb3; }
+    .rpt-download:focus-visible { outline: 2px solid #1d4f9e; outline-offset: 2px; }
+
+    /* Download PDF = the browser's print-to-PDF. Everything folded on screen is opened by the script below. */
+    @media print {
+      @page { margin: 14mm; }
+      body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      nav, .rpt-noprint { display: none !important; }
+      .rpt-page { max-width: none; padding: 0; }
+      .rpt-page > * + * { margin-top: 1rem !important; }
+      .rpt-page .shadow { box-shadow: none !important; border: 1px solid #e5e7eb; }
+      .rpt-page .shadow, .rpt-bar-row, .rpt-chart, details details { break-inside: avoid; }
+      .rpt-chart { min-width: 0; }
+      summary { list-style: none; cursor: default; }
+      summary::-webkit-details-marker { display: none; }
+    }
   </style>
 </head>
 <body class="bg-coaching-gradient min-h-screen">
   <%- include("partials/navigation", { currentPage: "coaching", username: username, userRole: userRole }) %>
 
-  <div class="max-w-5xl mx-auto px-4 py-8 space-y-6">
-    <a href="/observability/coaching" class="text-sm text-blue-800">← All coaching sessions</a>
+  <div class="rpt-page max-w-5xl mx-auto px-4 py-8 space-y-6"
+       data-print-title="Observation report - <%= report.teacher %> - <%= new Date(report.date).toISOString().slice(0, 10) %>">
+    <a href="/observability/coaching" class="rpt-noprint text-sm text-blue-800">← All coaching sessions</a>
 
     <div class="bg-white rounded-lg shadow p-6">
-      <h1 class="text-2xl font-bold text-gray-900">📋 Observation report</h1>
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <h1 class="text-2xl font-bold text-gray-900">📋 Observation report</h1>
+        <button type="button" class="rpt-download rpt-noprint" data-on-click="$print"
+                title="Opens the print dialog: choose Save as PDF">⬇ Download PDF</button>
+      </div>
       <p class="text-gray-700 mt-1">
         <%= report.teacher %><% if (report.classTaught) { %> · <%= report.classTaught %><% } %><% if (report.school) { %> · <%= report.school %><% } %>
         · <%= new Date(report.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) %>
@@ -95,7 +118,7 @@
           <p class="text-sm text-gray-700">
             Overall score, last <%= report.trend.points %> lessons up to this one:
             <span class="font-medium"><%= report.trend.change > 0 ? `up ${report.trend.change}` : report.trend.change < 0 ? `down ${-report.trend.change}` : 'no change of' %> points</span>
-            since <%= c.marks[0].label %>. Hover a point for its strand scores.
+            since <%= c.marks[0].label %>.<span class="rpt-noprint"> Hover a point for its strand scores.</span>
           </p>
           <div style="overflow-x: auto">
             <svg class="rpt-chart" viewBox="0 0 <%= c.width %> <%= c.height %>" role="img"
@@ -120,7 +143,7 @@
               <% }) %>
             </svg>
           </div>
-          <details class="text-sm">
+          <details class="text-sm rpt-noprint">
             <summary class="cursor-pointer text-gray-500">Show as a table</summary>
             <table class="mt-2 text-gray-700">
               <thead><tr><th class="text-left pr-6">Lesson</th><th class="text-right">Overall</th></tr></thead>
@@ -230,5 +253,28 @@
       <% } %>
     <% } %>
   </div>
+
+  <script src="/js/csp-actions.js"></script>
+  <script nonce="<%= cspNonce %>">
+    // Download PDF (the button, or Ctrl+P): print everything, including what is folded on screen, and name the file
+    // after the teacher and date. Both are put back afterwards.
+    (function () {
+      var page = document.querySelector('.rpt-page');
+      var opened = [];
+      var title = document.title;
+      window.addEventListener('beforeprint', function () {
+        opened = Array.prototype.filter.call(document.querySelectorAll('.rpt-page details:not([open])'), function (d) {
+          return !d.closest('.rpt-noprint');
+        });
+        opened.forEach(function (d) { d.open = true; });
+        if (page && page.dataset.printTitle) document.title = page.dataset.printTitle;
+      });
+      window.addEventListener('afterprint', function () {
+        opened.forEach(function (d) { d.open = false; });
+        opened = [];
+        document.title = title;
+      });
+    })();
+  </script>
 </body>
 </html>

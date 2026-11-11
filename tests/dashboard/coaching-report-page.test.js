@@ -183,6 +183,15 @@ describe('the page', () => {
     expect(view.replace(/<%- include\([^]*?%>/g, '')).not.toMatch(/<%-/);
   });
 
+  test('downloads as a PDF through the print dialog, with folded sections opened and a named file', () => {
+    expect(view).toMatch(/<button[^>]*data-on-click="\$print"[^>]*>[^<]*Download PDF/);
+    expect(view).toContain('<script src="/js/csp-actions.js"></script>');
+    const script = view.slice(view.indexOf('<script nonce="<%= cspNonce %>">'));
+    expect(script).toContain("addEventListener('beforeprint'");
+    expect(script).toContain("addEventListener('afterprint'");
+    expect(view).toMatch(/@media print[^]*nav, \.rpt-noprint \{ display: none/);
+  });
+
   test('is linked from the coaching list when a record exists', () => {
     expect(list).toMatch(/\/observability\/coaching\/<%= session\.id %>\/report/);
   });
