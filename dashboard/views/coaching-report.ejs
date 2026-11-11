@@ -28,6 +28,9 @@
       background: #2f6fd6; color: #fff; font-size: .875rem; font-weight: 600; white-space: nowrap; }
     .rpt-download:hover { background: #255bb3; }
     .rpt-download:focus-visible { outline: 2px solid #1d4f9e; outline-offset: 2px; }
+    .rpt-download.secondary { background: #fff; color: #2f6fd6; border: 1px solid #2f6fd6; }
+    .rpt-download.secondary:hover { background: #eef4fd; }
+    .rpt-record-only, .rpt-title-record { display: none; }
 
     /* Download PDF = the browser's print-to-PDF. Everything folded on screen is opened by the script below. */
     @media print {
@@ -41,6 +44,10 @@
       .rpt-chart { min-width: 0; }
       summary { list-style: none; cursor: default; }
       summary::-webkit-details-marker { display: none; }
+      /* Observation record: the short record only, no charts, evidence or reflection. */
+      body[data-print="record"] .rpt-report-only, body[data-print="record"] .rpt-title-report { display: none !important; }
+      body[data-print="record"] .rpt-record-only, body[data-print="record"] .rpt-title-record { display: block !important; }
+      body[data-print="record"] .rpt-title-record { display: inline !important; }
     }
   </style>
 </head>
@@ -48,14 +55,20 @@
   <%- include("partials/navigation", { currentPage: "coaching", username: username, userRole: userRole }) %>
 
   <div class="rpt-page max-w-5xl mx-auto px-4 py-8 space-y-6"
-       data-print-title="Observation report - <%= report.teacher %> - <%= new Date(report.date).toISOString().slice(0, 10) %>">
+       data-print-name="<%= report.teacher %> - <%= new Date(report.date).toISOString().slice(0, 10) %>">
     <a href="/observability/coaching" class="rpt-noprint text-sm text-blue-800">← All coaching sessions</a>
 
     <div class="bg-white rounded-lg shadow p-6">
       <div class="flex flex-wrap items-start justify-between gap-3">
-        <h1 class="text-2xl font-bold text-gray-900">📋 Observation report</h1>
-        <button type="button" class="rpt-download rpt-noprint" data-on-click="$print"
-                title="Opens the print dialog: choose Save as PDF">⬇ Download PDF</button>
+        <h1 class="text-2xl font-bold text-gray-900">📋 <span class="rpt-title-report">Observation report</span><span class="rpt-title-record">Observation record</span></h1>
+        <div class="flex flex-wrap gap-2 rpt-noprint">
+          <button type="button" class="rpt-download" data-on-click="printReport"
+                  title="The full report. Opens the print dialog: choose Save as PDF">⬇ Download PDF</button>
+          <% if (report.available) { %>
+            <button type="button" class="rpt-download secondary" data-on-click="printRecord"
+                    title="Level, action step, glows, grows and the note only. Opens the print dialog: choose Save as PDF">⬇ Observation record</button>
+          <% } %>
+        </div>
       </div>
       <p class="text-gray-700 mt-1">
         <%= report.teacher %><% if (report.classTaught) { %> · <%= report.classTaught %><% } %><% if (report.school) { %> · <%= report.school %><% } %>
@@ -86,7 +99,7 @@
           </p>
         </div>
 
-        <div class="space-y-3" role="list" aria-label="Score by strand">
+        <div class="space-y-3 rpt-report-only" role="list" aria-label="Score by strand">
           <% report.strandSummary.forEach((strand) => { %>
             <div class="rpt-bar-row" role="listitem"
                  title="<%= strand.name %>: <%= strand.observed ? `${strand.levelName} (${strand.percentage}%)` : 'not observed' %>">
@@ -110,7 +123,7 @@
         <% } %>
       </div>
 
-      <div class="bg-white rounded-lg shadow p-6 space-y-3">
+      <div class="bg-white rounded-lg shadow p-6 space-y-3 rpt-report-only">
         <h2 class="text-xl font-bold text-gray-900">📈 Progress over time</h2>
         <% if (!report.trend.chart) { %>
           <p class="text-sm text-gray-500">This is <%= report.teacher %>'s first lesson scored on the Silverleaf framework, so there is no trend yet. It will appear after the next one.</p>
@@ -199,9 +212,23 @@
             <p class="text-gray-700"><%= report.record.notes_for_teacher %></p>
           </div>
         <% } %>
+        <% const v = report.videoStats; if (v && v.readable) { %>
+          <div class="rpt-record-only">
+            <h2 class="text-lg font-bold text-gray-900">🎥 Seen in the video (<%= v.readable %> moments)</h2>
+            <ul class="list-disc ml-5 text-gray-700">
+              <li>Hands raised in <%= v.handsSeen %> of <%= v.handsJudged %> moments</li>
+              <li>Students off task in <%= v.offTaskSeen %> of <%= v.offTaskJudged %> moments</li>
+              <% if (v.teacherSeen) { %>
+                <li>Teacher visible in <%= v.teacherSeen %> moments, moved between areas <%= v.moves %> times, close work with students in <%= v.closeWork %></li>
+              <% } else { %>
+                <li>Teacher not visible, so circulation cannot be judged</li>
+              <% } %>
+            </ul>
+          </div>
+        <% } %>
       </div>
 
-      <details class="bg-white rounded-lg shadow p-6">
+      <details class="bg-white rounded-lg shadow p-6 rpt-report-only">
         <summary class="cursor-pointer text-xl font-bold text-gray-900">🔍 Evidence by indicator</summary>
         <p class="text-sm text-gray-500 mt-2">What the scores above are based on, substrand by substrand.</p>
         <% report.strands.forEach((strand) => { %>
@@ -231,7 +258,7 @@
       </details>
 
       <% if (report.videoEvidence) { %>
-        <details class="bg-white rounded-lg shadow p-6">
+        <details class="bg-white rounded-lg shadow p-6 rpt-report-only">
           <summary class="cursor-pointer text-xl font-bold text-gray-900">🎥 Seen in the video</summary>
           <p class="text-sm text-gray-500 mt-2">Sampled moments only, so they can miss what happens between them.</p>
           <pre class="text-sm text-gray-700 mt-2 whitespace-pre-wrap"><%= report.videoEvidence %></pre>
@@ -239,7 +266,7 @@
       <% } %>
 
       <% if (report.reflection.length) { %>
-        <details class="bg-white rounded-lg shadow p-6">
+        <details class="bg-white rounded-lg shadow p-6 rpt-report-only">
           <summary class="cursor-pointer text-xl font-bold text-gray-900">💭 Teacher's reflection</summary>
           <div class="space-y-3 mt-3">
             <% report.reflection.forEach((turn) => { %>
@@ -256,24 +283,42 @@
 
   <script src="/js/csp-actions.js"></script>
   <script nonce="<%= cspNonce %>">
-    // Download PDF (the button, or Ctrl+P): print everything, including what is folded on screen, and name the file
-    // after the teacher and date. Both are put back afterwards.
+    // Download as PDF through the print dialog. Two kinds: the full report (the Download PDF button, or Ctrl+P) and the
+    // observation record (level, action step, glows, grows, note, video counts). Everything folded on screen is
+    // opened and the file is named after the teacher and date; both are put back afterwards.
+    // ?download=report or ?download=record (the links on the coaching list) opens the dialog on arrival.
     (function () {
       var page = document.querySelector('.rpt-page');
       var opened = [];
       var title = document.title;
+
+      function print(kind) {
+        document.body.dataset.print = kind;
+        window.print();
+      }
+      function printReport() { print('report'); }
+      function printRecord() { print('record'); }
+      window.cspActions.register({ printReport: printReport, printRecord: printRecord });
+
       window.addEventListener('beforeprint', function () {
         opened = Array.prototype.filter.call(document.querySelectorAll('.rpt-page details:not([open])'), function (d) {
           return !d.closest('.rpt-noprint');
         });
         opened.forEach(function (d) { d.open = true; });
-        if (page && page.dataset.printTitle) document.title = page.dataset.printTitle;
+        var kind = document.body.dataset.print === 'record' ? 'Observation record' : 'Observation report';
+        if (page && page.dataset.printName) document.title = kind + ' - ' + page.dataset.printName;
       });
       window.addEventListener('afterprint', function () {
         opened.forEach(function (d) { d.open = false; });
         opened = [];
         document.title = title;
+        delete document.body.dataset.print;
       });
+
+      var wanted = new URLSearchParams(window.location.search).get('download');
+      if (wanted === 'report' || (wanted === 'record' && document.querySelector('[data-on-click="printRecord"]'))) {
+        window.addEventListener('load', function () { setTimeout(function () { print(wanted); }, 300); });
+      }
     })();
   </script>
 </body>

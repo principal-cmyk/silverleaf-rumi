@@ -184,12 +184,29 @@ describe('the page', () => {
   });
 
   test('downloads as a PDF through the print dialog, with folded sections opened and a named file', () => {
-    expect(view).toMatch(/<button[^>]*data-on-click="\$print"[^>]*>[^<]*Download PDF/);
+    expect(view).toMatch(/<button[^>]*data-on-click="printReport"[^>]*>[^<]*Download PDF/);
     expect(view).toContain('<script src="/js/csp-actions.js"></script>');
     const script = view.slice(view.indexOf('<script nonce="<%= cspNonce %>">'));
     expect(script).toContain("addEventListener('beforeprint'");
     expect(script).toContain("addEventListener('afterprint'");
     expect(view).toMatch(/@media print[^]*nav, \.rpt-noprint \{ display: none/);
+  });
+
+  test('the observation record downloads on its own: no charts, evidence or reflection', () => {
+    expect(view).toMatch(/<button[^>]*data-on-click="printRecord"[^>]*>[^<]*Observation record/);
+    expect(view).toMatch(/body\[data-print="record"\] \.rpt-report-only[^{]*\{ display: none/);
+    for (const section of ['Progress over time', 'Evidence by indicator', "Teacher's reflection"]) {
+      const at = view.indexOf(section);
+      expect(view.lastIndexOf('rpt-report-only', at)).toBeGreaterThan(view.lastIndexOf('<div class="bg-white', at - 400) - 1);
+    }
+    expect(view).toMatch(/aria-label="Score by strand"/);
+    expect(view).toMatch(/class="space-y-3 rpt-report-only" role="list"/);
+  });
+
+  test('the coaching list links straight to both downloads', () => {
+    expect(list).toContain('/report?download=record');
+    expect(list).toContain('/report?download=report');
+    expect(view).toContain("new URLSearchParams(window.location.search).get('download')");
   });
 
   test('is linked from the coaching list when a record exists', () => {
