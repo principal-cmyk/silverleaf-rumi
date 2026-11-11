@@ -50,6 +50,7 @@ const {
 
 // Coaching Observability Service
 const { getSessionReport, getTeacherTrend, buildReportView } = require('./services/coaching-report.service');
+const { getReportBrand, logoFile } = require('./config/report-brand');
 const { getCoachingSessions, getStatusStats } = require('./services/coaching-observability.service');
 
 // Transcript UX Helpers 
@@ -1306,6 +1307,16 @@ app.get('/observability/coaching',
   }
 });
 
+// The organisation's logo for the report (REPORT_LOGO_FILE / REPORT_LOGO_ON_DARK_FILE). Only these two files, and
+// only image types, can be served here; an SVG gets a policy that lets it style itself and nothing else.
+app.get('/observability/brand/:which(logo|logo-on-dark)', requireAuth, (req, res) => {
+  const logo = logoFile(req.params.which);
+  if (!logo) return res.status(404).end();
+  res.set('Cache-Control', 'private, max-age=3600');
+  if (logo.type === 'image/svg+xml') res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+  res.type(logo.type).sendFile(logo.file);
+});
+
 // One lesson's full report. Same access rules as the list, read through the same scoped client.
 app.get('/observability/coaching/:sessionId/report',
   requireAuth,
@@ -1320,7 +1331,9 @@ app.get('/observability/coaching/:sessionId/report',
       });
     }
     const trend = await getTeacherTrend(req.dbClient, row);
-    res.render('coaching-report', { title: 'Observation report', report: buildReportView(row, trend) });
+    res.render('coaching-report', {
+      title: 'Observation report', report: buildReportView(row, trend), brand: getReportBrand(),
+    });
   } catch (error) {
     console.error('Coaching report error:', error);
     res.status(500).render('error', {

@@ -22,6 +22,10 @@ bun.lockb
 docs/internal/
 .agents/
 
+# An organisation's own logo files for the dashboard report (REPORT_LOGO_FILE).
+# They belong to that organisation, not to this repo.
+/brand/
+
 # Secrets and credentials
 keys/
 *.pem

@@ -195,12 +195,26 @@ describe('the page', () => {
   test('the observation record downloads on its own: no charts, evidence or reflection', () => {
     expect(view).toMatch(/<button[^>]*data-on-click="printRecord"[^>]*>[^<]*Observation record/);
     expect(view).toMatch(/body\[data-print="record"\] \.rpt-report-only[^{]*\{ display: none/);
-    for (const section of ['Progress over time', 'Evidence by indicator', "Teacher's reflection"]) {
+    // The element that opens each report-only part carries the class.
+    for (const section of ['>Progress over time<', '>Evidence by indicator<', ">Teacher's reflection<", 'aria-label="Score by strand"']) {
       const at = view.indexOf(section);
-      expect(view.lastIndexOf('rpt-report-only', at)).toBeGreaterThan(view.lastIndexOf('<div class="bg-white', at - 400) - 1);
+      const opener = view.slice(Math.max(view.lastIndexOf('<section', at), view.lastIndexOf('<details', at), view.lastIndexOf('<div', at)), at);
+      expect(opener).toContain('rpt-report-only');
     }
-    expect(view).toMatch(/aria-label="Score by strand"/);
-    expect(view).toMatch(/class="space-y-3 rpt-report-only" role="list"/);
+  });
+
+  test('takes its colours, fonts and logo from the brand settings, naming no organisation itself', () => {
+    for (const v of ['brand.colours.primary', 'brand.colours.accent', 'brand.colours.highlight', 'brand.colours.neutral', 'brand.fontHref']) {
+      expect(view).toContain(v);
+    }
+    expect(view).toMatch(/<% if \(brand\.hasLogoOnDark\) \{ %>\s*<img[^>]*src="\/observability\/brand\/logo-on-dark"/);
+    expect(view.toLowerCase()).not.toContain('silverleaf');
+  });
+
+  test('the logo route needs a sign-in and serves only the two configured logos', () => {
+    const route = index.slice(index.indexOf("app.get('/observability/brand/"));
+    expect(route.slice(0, 120)).toMatch(/\/observability\/brand\/:which\(logo\|logo-on-dark\)', requireAuth,/);
+    expect(route.slice(0, 600)).toContain('logoFile(req.params.which)');
   });
 
   test('the coaching list links straight to both downloads', () => {
