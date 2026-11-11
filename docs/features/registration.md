@@ -16,6 +16,10 @@ The front door. Rumi keeps onboarding light: a new teacher can start using a fea
 4. **On Rumi Messenger (Matrix)** the name is not tied to a feature: after Rumi's first reply to someone who is not registered, it offers registration once ("what should I call you? … or just keep chatting"), and `register` starts it at any time. An introduction ("my name is Ayesha") registers at once; a bare name is asked about first ("Shall I call you Ayesha? Reply yes, or tell me your name."), since one-word chat reads like a name. A reply that is not a name is answered as usual, and "no thanks" closes the offer. Details: [Matrix channel](../channels/matrix.md#registration-and-commands-on-the-messenger).
 5. **Optional richer intake:** if a `REGISTRATION_FLOW_ID` is configured, Rumi sends a native WhatsApp form collecting school, grade, and language up front instead.
 
+## Registering on first use
+
+With `REGISTER_ON_FIRST_USE=true`, a teacher registers before anything else: name, grade and stream, one question at a time in chat. Nothing else works until that is done. Subject is not part of it, because a teacher can teach several, so it is asked for each lesson: after confirming a recording for coaching, and when a lesson plan request does not name one. The grade and stream go into the coaching prompt and the [dashboard](../console.md) report.
+
 ## What the teacher experiences
 
 No wall of questions up front — they get help first, then a single friendly "what should I call you?" Everything after that (language, grade-appropriate content, coaching framework) keys off their profile.

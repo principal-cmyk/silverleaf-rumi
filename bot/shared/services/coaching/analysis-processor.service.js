@@ -76,7 +76,7 @@ class AnalysisProcessorService {
       // Get session data
       const { data: session, error: sessionError } = await supabase
         .from('coaching_sessions')
-        .select('*, users!inner(phone_number, first_name, last_name)')
+        .select('*, users!inner(phone_number, first_name, last_name, grades_taught, preferences)')
         .eq('id', coachingSessionId)
         .single();
 
@@ -139,6 +139,9 @@ class AnalysisProcessorService {
         lessonPlanSubject: session.lesson_plan_structured?.subject || null,
         lessonPlanTopic: session.lesson_plan_structured?.topic || null,
         visualEvidence: session.conversation_state?.video_observations || null,
+        subject: session.conversation_state?.subject || session.lesson_plan_structured?.subject || null,
+        grade: [session.users.grades_taught, session.users.preferences?.stream && `Stream ${session.users.preferences.stream}`]
+          .filter(Boolean).join(', ') || null,
         ...(isObservation ? { teacherName: session.users.first_name || null } : {})
       };
 

@@ -473,6 +473,13 @@ async function handleWebhookPost(req, res) {
     }
     senderLang = (user && user.preferred_language) || null;
 
+    // Registration comes before everything, including the message cap, so a new teacher can always finish it.
+    const FirstUseRegistration = require('./shared/services/first-use-registration.service');
+    if (await FirstUseRegistration.handleFirstUse({ user, from, messageType, messageBody })) {
+      ack();
+      return;
+    }
+
     // Today's message allowance for this account's tier (limits/daily-caps.js;
     // no cap unless the operator set one). Told once, then quiet until the
     // next school day. Finishing registration stays possible: register (with

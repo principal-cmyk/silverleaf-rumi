@@ -338,6 +338,16 @@ async function handleTextMessage(message, from, messageBody, user = null) {
     }
   }
 
+  // A lesson's subject, asked by the feature that needed it (lesson-subject.service.js).
+  if (user) {
+    const LessonSubject = require('../services/lesson-subject.service');
+    if (await LessonSubject.handleCoachingReply(user, from, messageBody)) {
+      if (typingController) typingController.stop();
+      return;
+    }
+    messageBody = (await LessonSubject.resumeLessonPlan(user, messageBody)) || messageBody;
+  }
+
   // ============================================================
   // FEATURE-BASED REGISTRATION: Check if waiting for name
   // ============================================================
@@ -2253,6 +2263,12 @@ async function handleLessonPlanRequest(from, messageBody, user, sessionId, respo
       return;
     }
 
+    // Which subject, if the request does not say. The reply brings this request back.
+    if (await require('../services/lesson-subject.service').holdLessonPlan(user, from, messageBody)) {
+      typingController.stop();
+      return;
+    }
+
     // Today's lesson-plan allowance for an unregistered account
     // (limits/daily-caps.js) — checked before the topic is read or a plan queued.
     if (!(await DailyCaps.allowOrExplain(user, 'lesson_plan', from))) {
@@ -2380,6 +2396,12 @@ async function handlePresentationRequest(from, messageBody, user, sessionId, res
   try {
     // Not configured here (no GAMMA_API_KEY): say so, queue nothing (lesson-plan-availability.js).
     if (await LessonPlanAvailability.explainIfUnavailable(from, { user, language: responseLanguage })) {
+      typingController.stop();
+      return;
+    }
+
+    // Which subject, if the request does not say. The reply brings this request back.
+    if (await require('../services/lesson-subject.service').holdLessonPlan(user, from, messageBody)) {
       typingController.stop();
       return;
     }

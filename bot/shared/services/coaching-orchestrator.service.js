@@ -46,6 +46,10 @@ class CoachingOrchestrator {
     const result = await CoachingSessionService.handleConfirmation(coachingSessionId, from, confirmed);
 
     if (result.confirmed) {
+      // The subject belongs to this lesson. If asked, the teacher's answer queues the transcription.
+      const LessonSubject = require('./lesson-subject.service');
+      if (await LessonSubject.askForCoaching(result.session, from)) return result;
+
       // Queue transcription job
       await this.queueTranscription(coachingSessionId, {
         from,
