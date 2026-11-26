@@ -1,0 +1,6 @@
+# Railway (Nixpacks fallback when Dockerfile is not used): nested bot/ install.
+[phases.install]
+cmds = [
+  "npm ci --omit=dev --no-fund --no-audit",
+  "npm ci --prefix bot --omit=dev --no-fund --no-audit",
+]
