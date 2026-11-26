@@ -4,6 +4,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "node scripts/ensure-bot-deps.js && node bin/rumi.js start"
+# Railway execs this without a shell, so && never reaches the bot.
+startCommand = "node bin/rumi.js start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
