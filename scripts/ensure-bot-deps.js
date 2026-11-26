@@ -12,7 +12,8 @@ const marker = path.join(repoRoot, 'bot', 'node_modules', 'pino', 'package.json'
 
 function ensureBotDeps() {
   if (fs.existsSync(marker)) return;
-  console.error('[rumi] bot/node_modules missing — running npm ci in bot/ …');
+  const { version } = require('../package.json');
+  console.error(`[rumi] v${version} bot/node_modules missing — installing bot/ deps …`);
   const installCmd =
     'npm ci --prefix bot --omit=dev --no-fund --no-audit || npm install --prefix bot --omit=dev --no-fund --no-audit';
   execSync(installCmd, {
