@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "node bot/whatsapp-bot.js",
+    "startCommand": "node scripts/ensure-bot-deps.js && node bot/whatsapp-bot.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE",

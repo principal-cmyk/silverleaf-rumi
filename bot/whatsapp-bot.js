@@ -1,3 +1,6 @@
+// Install bot/ production deps when the image only ran root npm install (Railway/Nixpacks).
+require('../scripts/ensure-bot-deps').ensureBotDeps();
+
 // Structured logging - must be first to capture all console.log calls
 const { generateCorrelationId, runWithCorrelation } = require('./shared/utils/structured-logger');
 
