@@ -442,7 +442,18 @@ async function connect(opts = {}) {
         } else {
           // Not a logout (network blip, the expected post-pairing "restart
           // required", etc.) — reconnect, paced by reconnectDelayMs().
-          const delayMs = reconnectDelayMs(reconnectFailures);
+          // 440 means another process is logged into this same WhatsApp
+          // session. Reconnecting instantly just trades the socket back and
+          // forth and drops every message in between.
+          const replaced = statusCode === DisconnectReason.connectionReplaced;
+          let delayMs = reconnectDelayMs(reconnectFailures);
+          if (replaced) {
+            delayMs = Math.max(delayMs, 30_000);
+            logToFile('Baileys: another login replaced this session. Waiting before reconnecting so the two copies stop fighting.', {
+              delayMs,
+              statusCode,
+            });
+          }
           reconnectFailures += 1;
           socketPromise = null;
           if (delayMs > 0) logToFile('Baileys: waiting before reconnecting', { delayMs, attempt: reconnectFailures });

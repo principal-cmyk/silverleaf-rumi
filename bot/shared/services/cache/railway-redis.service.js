@@ -30,11 +30,80 @@ const TTL_CEILING_SECONDS = 24 * 60 * 60;
 /** Fallback TTL for setNX() when the caller passes no usable one. */
 const SETNX_DEFAULT_TTL_SECONDS = 60;
 
+/**
+ * In-process stand-in for the ioredis commands chat handlers call directly
+ * (`redis.get`, `setex`, `del`, …). Those callers do not check isAvailable(),
+ * so a missing REDIS_URL used to throw and swallow the reply. status is not
+ * "ready", so isAvailable() stays false and rate limits keep their local window.
+ */
+function createMemoryRedis() {
+  const store = new Map();
+
+  function live(key) {
+    const row = store.get(key);
+    if (!row) return null;
+    if (row.expiresAt != null && row.expiresAt <= Date.now()) {
+      store.delete(key);
+      return null;
+    }
+    return row;
+  }
+
+  return {
+    status: 'memory',
+    async get(key) {
+      const row = live(key);
+      return row ? row.value : null;
+    },
+    async set(key, value, ...rest) {
+      let expiresAt = null;
+      if (rest[0] === 'EX' && rest[1] != null) {
+        expiresAt = Date.now() + Number(rest[1]) * 1000;
+      }
+      if (rest.includes('NX') && live(key)) return null;
+      store.set(key, { value: String(value), expiresAt });
+      return 'OK';
+    },
+    async setex(key, ttlSeconds, value) {
+      store.set(key, {
+        value: String(value),
+        expiresAt: Date.now() + Number(ttlSeconds) * 1000,
+      });
+      return 'OK';
+    },
+    async del(...keys) {
+      let removed = 0;
+      for (const key of keys) {
+        if (store.delete(key)) removed += 1;
+      }
+      return removed;
+    },
+    async incr(key) {
+      const row = live(key);
+      const next = (row ? Number(row.value) : 0) + 1;
+      store.set(key, { value: String(next), expiresAt: row ? row.expiresAt : null });
+      return next;
+    },
+    async expire(key, ttlSeconds) {
+      const row = live(key);
+      if (!row) return 0;
+      row.expiresAt = Date.now() + Number(ttlSeconds) * 1000;
+      return 1;
+    },
+    async exists(key) {
+      return live(key) ? 1 : 0;
+    },
+    async quit() {
+      return 'OK';
+    },
+  };
+}
+
 class RailwayRedisService {
   constructor() {
     if (!process.env.REDIS_URL) {
-      logToFile('⚠️  REDIS_URL not configured. Redis service disabled.', { level: 'warn' });
-      this.redis = null;
+      logToFile('⚠️  REDIS_URL not configured. Chat state is in memory for this process.', { level: 'warn' });
+      this.redis = createMemoryRedis();
       return;
     }
 
@@ -121,7 +190,7 @@ class RailwayRedisService {
       logToFile('❌ Failed to initialize Railway Redis', {
         error: error.message
       });
-      this.redis = null;
+      this.redis = createMemoryRedis();
     }
   }
 
