@@ -1,12 +1,13 @@
 {
   "name": "rumi-platform",
-  "version": "2.11.5",
+  "version": "2.11.6",
   "description": "Rumi - AI Teaching Assistant for WhatsApp. Open-source platform for deploying AI-powered educational chatbots.",
   "private": true,
   "bin": {
     "rumi": "./bin/rumi.js"
   },
   "scripts": {
+    "postinstall": "npm ci --prefix bot --omit=dev --no-fund --no-audit || npm install --prefix bot --omit=dev --no-fund --no-audit",
     "test": "node tests/run.js",
     "test:security": "node tests/run.js --testPathPattern=sprint-0",
     "test:sprint1": "node tests/run.js --testPathPattern=sprint-1",
@@ -28,7 +29,7 @@
     "setup": "node bin/rumi.js setup",
     "status": "node bin/rumi.js status",
     "pair": "node bin/rumi.js pair",
-    "start": "node bin/rumi.js start",
+    "start": "node scripts/ensure-bot-deps.js && node bin/rumi.js start",
     "dashboard:architecture": "node tools/architecture-dashboard/server.js"
   },
   "keywords": [

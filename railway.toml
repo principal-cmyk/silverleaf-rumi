@@ -1,0 +1,9 @@
+# principal-cmyk/silverleaf-rumi — WhatsApp bot service root.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "node scripts/ensure-bot-deps.js && node bin/rumi.js start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

@@ -152,7 +152,9 @@ async function waitForHealth(url, { timeoutMs = 30000, intervalMs = 400, fetchIm
 const COMMANDS = {
   start: {
     summary: 'Start Rumi (the bot itself)',
-    run: () => new Promise((resolve) => {
+    run: async () => {
+      require(path.join(REPO_ROOT, 'scripts', 'ensure-bot-deps')).ensureBotDeps();
+      await new Promise((resolve) => {
       // Runs from the repo root so .env and the WhatsApp session resolve the
       // same way whatever directory you called `rumi` from — the reason this
       // command exists rather than `cd bot && npm start`.
@@ -195,7 +197,8 @@ const COMMANDS = {
         process.exitCode = signal ? 1 : (code || 0);
         resolve();
       });
-    }),
+      });
+    },
   },
   setup: {
     summary: 'Connect Rumi to your accounts — start here',
